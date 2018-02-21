@@ -1,0 +1,11 @@
+xucore.println ("hello world")
+
+local b = Buffer.alloc(256)
+print(b)
+print(b:cap())
+b:writeInt8(100, 0xff)
+print(b:readInt8(0xff))
+print("len " .. b:len())
+print("toString " .. b:toString())
+b:fill(65)
+print("toString2 " .. b:toString())

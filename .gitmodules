@@ -1,0 +1,12 @@
+[submodule "3rd/luajit"]
+	path = 3rd/luajit
+	url = http://luajit.org/git/luajit-2.0.git
+[submodule "3rd/libev"]
+	path = 3rd/libev
+	url = https://github.com/kindy/libev.git
+[submodule "3rd/cJSON"]
+	path = 3rd/cJSON
+	url = https://github.com/DaveGamble/cJSON.git
+[submodule "3rd/libuv"]
+	path = 3rd/libuv
+	url = https://github.com/libuv/libuv.git

@@ -1,0 +1,8 @@
+*.o
+*.swp
+*.a
+*.so
+3rd/usr
+xademo
+demo
+tags
