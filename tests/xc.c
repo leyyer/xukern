@@ -12,11 +12,7 @@ int main(int argc, char *argv[])
 	ctx = xu_ctx_new();
 
 	xu_ctx_load(ctx, argv[1]);
-
-	xu_udp_t udp = xu_udp_open(ctx);
-	xu_udp_close(udp);
 	xu_ctx_run(ctx);
-
 	xu_core_exit();
 	return 0;
 }

@@ -134,12 +134,14 @@ static int  __buf_readInt8(lua_State *L)
 	return 0;
 }
 
+#ifdef BUFFER_GC
 static int __buf_gc(lua_State *L)
 {
 	struct buffer *b = BUFFER(1);
 	xu_println("buffer gc: %p", b);
 	return 0;
 }
+#endif
 
 void init_lua_buffer(lua_State *L)
 {
@@ -157,7 +159,9 @@ void init_lua_buffer(lua_State *L)
 		{"readInt8",  __buf_readInt8},
 		{"toString",  __buf_toString},
 		{"dump",      __buf_dump},
+#ifdef BUFFER_GC
 		{"__gc",      __buf_gc},
+#endif
 		{NULL, NULL}
 	};
 

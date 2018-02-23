@@ -28,7 +28,7 @@ CFLAGS  += -I$(TOP)/include -I$(RD3ROOT)/include -I$(TOP)/core -std=gnu99 -Wall 
 LDFLAGS += -L$(TOP) -L$(RD3ROOT)/lib -Wl,--start-group $(LINKLIBS) -Wl,--end-group
 
 LUA_OBJS := core/builtin/lua_buffer.o \
-			core/builtin/lua_udp.o \
+			core/builtin/lua_net.o \
 
 OBJS += core/xu_utils.o \
 		core/xu_malloc.o \
@@ -37,6 +37,7 @@ OBJS += core/xu_utils.o \
 		core/xu_env.o \
 		core/xu_ctx.o \
 		core/xu_udp.o \
+		core/xu_tcp.o \
 
 OBJS += $(LUA_OBJS)
 

@@ -2,10 +2,13 @@
 #include "xu_impl.h"
 #include "lua_buffer.h"
 
-#define SOCK_MTDGRAM "mt.Dgram"
+#define SOCK_MTDGRAM  "mt.Dgram"
+#define SOCK_MTSTREAM "mt.Stream"
+
 #define SOCK_MTADDR  "mt.SockAddr"
 #define SOCKADDR()  (luaL_checkudata(L, 1, SOCK_MTADDR))
 #define UDP()       (luaL_checkudata(L, 1, SOCK_MTDGRAM))
+#define TCP()       (luaL_checkudata(L, 1, SOCK_MTSTREAM))
 
 static int __sock_address(lua_State *L)
 {
@@ -155,7 +158,7 @@ static int __sock_udp_bind(lua_State *L)
 {
 	struct udp_wrap *uwr = UDP();
 	xu_udp_t udp = uwr->udp;
-	const char *addr;
+	const char *addr = NULL;
 	int port, err;
 	int top = lua_gettop(L);
 
@@ -166,11 +169,6 @@ static int __sock_udp_bind(lua_State *L)
 			break;
 		case 2:
 			port = luaL_checkinteger(L, 2); /* <2> only port */
-			if (uwr->is_ipv4) {
-				addr = "0.0.0.0";
-			} else {
-				addr = "::0";
-			}
 			break;
 		default:
 			return 0;
@@ -585,9 +583,398 @@ static void __sock_dgram(lua_State *L, xuctx_t ctx)
 	lua_pop(L, 1);
 }
 
-void init_lua_udp(lua_State *L, xuctx_t ctx)
+struct tcp_wrap {
+	xu_tcp_t tcp;
+	lua_State *L;
+
+	int is_ipv4;
+
+	int recv;
+	int send;
+	int connect;
+	int accept;
+};
+
+static struct tcp_wrap * __tcp_new(lua_State *L, xu_tcp_t tcp, int ipv4)
+{
+	struct tcp_wrap *uwr;
+
+	uwr = lua_newuserdata(L, sizeof *uwr);
+
+	uwr->tcp = tcp;
+	uwr->is_ipv4 = ipv4;
+	uwr->recv = LUA_REFNIL;
+	uwr->send = LUA_REFNIL;
+	uwr->connect = LUA_REFNIL;
+	uwr->accept = LUA_REFNIL;
+	uwr->L = L;
+	xu_tcp_set_data(tcp, uwr);
+
+	luaL_getmetatable(L, SOCK_MTSTREAM);
+	lua_setmetatable(L, -2);
+
+	return uwr;
+}
+
+static int __sock_tcp_new__(lua_State *L, int fd)
+{
+	const char *str;
+	xu_tcp_t tcp;
+	int ipv4;
+	xuctx_t ctx = lua_touserdata(L, lua_upvalueindex(1));
+
+	str = luaL_checkstring(L, 1);
+	if (strcasecmp(str, "tcp4") == 0) {
+		ipv4 = 1;
+	} else {
+		ipv4 = 0;
+	}
+
+	if (fd < 0)
+		tcp = xu_tcp_open(ctx);
+	else
+		tcp = xu_tcp_open_with_fd(ctx, fd);
+
+	if (!tcp)
+		return 0;
+
+	__tcp_new(L, tcp, ipv4);
+
+	return 1;
+}
+
+static int __sock_tcp_new(lua_State *L)
+{
+	return __sock_tcp_new__(L, -1);
+}
+
+static int __sock_tcp_new_with_fd(lua_State *L)
+{
+	int fd = luaL_checkinteger(L, 1);
+	return __sock_tcp_new__(L, fd);
+}
+
+static int __sock_tcp_close(lua_State *L)
+{
+	struct tcp_wrap *uwr = TCP();
+	xu_tcp_t tcp = uwr->tcp;
+
+	luaL_unref(L, LUA_REGISTRYINDEX, uwr->recv);
+	luaL_unref(L, LUA_REGISTRYINDEX, uwr->send);
+	luaL_unref(L, LUA_REGISTRYINDEX, uwr->connect);
+	luaL_unref(L, LUA_REGISTRYINDEX, uwr->accept);
+	uwr->recv  = LUA_REFNIL;
+	uwr->send = LUA_REFNIL;
+	uwr->connect = LUA_REFNIL;
+	uwr->accept = LUA_REFNIL;
+	xu_tcp_close(tcp);
+	return 0;
+}
+
+static void __on_tcp_recv(xu_tcp_t udp, const void *data, int nread)
+{
+	struct tcp_wrap *uwr;
+	int r;
+	struct buffer *buf;
+	lua_State *L;
+
+	uwr = xu_tcp_get_data(udp);
+	L = uwr->L;
+	if (uwr->recv != LUA_REFNIL) {
+		int top = lua_gettop(L);
+		if (top != 1) {
+			lua_pushcfunction(L, xu_luatraceback);
+		} else {
+			assert(top == 1);
+		}
+		lua_rawgeti(L, LUA_REGISTRYINDEX, uwr->recv);
+		printf("nread = %d\n", nread);
+		lua_pushinteger(L, nread); /* <1>: length */
+		if (nread > 0) {           /* <2>: buffer or nil */
+			buf = buffer_new(L, nread);
+			memcpy(buf->data, data, nread);
+		} else {
+			lua_pushnil(L);
+		}
+		r = lua_pcall(L, 2, 0, 1);
+		if (r != 0) {
+			xu_println("%s: %s", __func__, lua_tostring(L, -1));
+			lua_pop(L, 1);
+		}
+	}
+}
+
+static int __sock_tcp_recv_start(lua_State *L)
+{
+	struct tcp_wrap *uwr = TCP();
+	xu_tcp_t udp = uwr->tcp;
+	int err = -1;
+
+	if (lua_type(L, 2) != LUA_TFUNCTION) {
+		goto skip;
+	}
+
+	if (uwr->recv != LUA_REFNIL) {
+		luaL_unref(L, LUA_REGISTRYINDEX, uwr->recv);
+	}
+	uwr->recv = luaL_ref(L, LUA_REGISTRYINDEX);
+	err = xu_tcp_recv_start(udp, __on_tcp_recv);
+skip:
+	lua_pushboolean(L, err == 0);
+	return 1;
+}
+
+static int __sock_tcp_recv_stop(lua_State *L)
+{
+	struct tcp_wrap *uwr = TCP();
+	xu_tcp_t udp = uwr->tcp;
+	int err;
+
+	err = xu_tcp_recv_stop(udp);
+	luaL_unref(L, LUA_REGISTRYINDEX, uwr->recv);
+	uwr->recv = LUA_REFNIL;
+	lua_pushboolean(L, err == 0);
+	return 1;
+}
+
+static int __sock_tcp_on_send(lua_State *L)
+{
+	struct tcp_wrap *uwr = TCP();
+	int err = 0;
+
+	if (lua_type(L, 2) != LUA_TFUNCTION) {
+		err = -1;
+		goto skip;
+	}
+	if (uwr->send != LUA_REFNIL) {
+		luaL_unref(L, LUA_REGISTRYINDEX, uwr->send);
+	}
+	uwr->send = luaL_ref(L, LUA_REGISTRYINDEX);
+skip:
+	lua_pushboolean(L, err == 0);
+	return 1;
+}
+
+static void __on_tcp_send(xu_tcp_t udp, int status)
+{
+	struct tcp_wrap *uwr;
+	int r, top;
+	lua_State *L;
+
+	uwr = xu_tcp_get_data(udp);
+	if (uwr->send != LUA_REFNIL) {
+		L = uwr->L;
+		top = lua_gettop(L);
+		if (top != 1) {
+			lua_pushcfunction(L, xu_luatraceback);
+		} else {
+			assert(top == 1);
+		}
+		lua_rawgeti(L, LUA_REGISTRYINDEX, uwr->recv);
+		lua_pushinteger(L, status); /* <1>: status */
+		r = lua_pcall(L, 1, 0, 1);
+		if (r != 0) {
+			xu_println("%s: %s", __func__, lua_tostring(L, -1));
+			lua_pop(L, 1);
+		}
+	}
+//	xu_println("send status %d", status);
+}
+
+static int __sock_tcp_send(lua_State *L)
+{
+	struct tcp_wrap *uwr = TCP();
+	xu_tcp_t tcp = uwr->tcp;
+	int err = 0;
+	const char *s;
+	struct xu_buf xb;
+	struct buffer *buf;
+	size_t sz = 0;
+
+	switch (lua_type(L, 2)) {
+		case LUA_TSTRING:           /* <2> string */
+			s = luaL_checklstring(L, 2, &sz);
+			xb.base = (void *)s;
+			xb.len = sz;
+			printf("sz = %u\n", sz);
+			break;
+		case LUA_TUSERDATA:
+			buf = BUFFER(2);       /* <2> data */
+			if (buf) {
+				xb.base = buf->data;
+				xb.len = buf->cap;
+			} else {
+				err = -1;
+			}
+			break;
+		default:
+			err = -2;
+			break;
+	}
+
+	if (err != 0) {
+		goto skip;
+	}
+
+	err = xu_tcp_send(tcp, &xb, 1, __on_tcp_send);
+skip:
+	lua_pushboolean(L, err == 0);
+	return 1;
+}
+
+static void __on_accept(xu_tcp_t server, xu_tcp_t tcp, int status)
+{
+	struct tcp_wrap *twr = xu_tcp_get_data(server);
+	lua_State *L;
+	int r, top;
+
+	//xu_println("on accept");
+	if (twr->accept != LUA_REFNIL) {
+		L = twr->L;
+		top = lua_gettop(L);
+		if (top != 1) {
+			lua_pushcfunction(L, xu_luatraceback);
+		} else {
+			assert(top == 1);
+		}
+		lua_rawgeti(L, LUA_REGISTRYINDEX, twr->accept);
+		lua_pushboolean(L, status == 0); /* <1>: status */
+		if (tcp) {                       /* <2>: new client */
+			__tcp_new(L, tcp, twr->is_ipv4);
+		} else {
+			lua_pushnil(L);
+		}
+		r = lua_pcall(L, 2, 0, 1);
+		if (r != 0) {
+			xu_println("%s: %s", __func__, lua_tostring(L, -1));
+			lua_pop(L, 1);
+		}
+	} else {
+		xu_println("on accept callback nil");
+	}
+}
+
+static int __sock_tcp_listen(lua_State *L)
+{
+	struct tcp_wrap *uwr = TCP();
+	xu_tcp_t tcp = uwr->tcp;
+	int backlog;
+	int err;
+
+	backlog = luaL_checkinteger(L, 2);
+	if (uwr->accept != LUA_REFNIL)
+		luaL_unref(L, LUA_REGISTRYINDEX, uwr->accept);
+	uwr->accept = luaL_ref(L, LUA_REGISTRYINDEX);
+	err = xu_tcp_listen(tcp, backlog, __on_accept);
+	lua_pushboolean(L, err == 0);
+	return 1;
+}
+
+static void __on_connect(xu_tcp_t tcp, int status)
+{
+	struct tcp_wrap *twr = xu_tcp_get_data(tcp);
+
+	if (twr->connect != LUA_REFNIL) {
+		lua_State *L = twr->L;
+		int top = lua_gettop(L);
+		if (top != 1) {
+			lua_pushcfunction(L, xu_luatraceback);
+		} else {
+			assert(top == 1);
+		}
+		lua_rawgeti(L, LUA_REGISTRYINDEX, twr->connect);
+		lua_pushinteger(L, status); /* <1>: status */
+		int r = lua_pcall(L, 1, 0, 1);
+		if (r != 0) {
+			xu_println("%s: %s", __func__, lua_tostring(L, -1));
+			lua_pop(L, 1);
+		}
+	}
+}
+
+static int __sock_tcp_connect(lua_State *L)
+{
+	struct tcp_wrap *uwr = TCP();
+	xu_tcp_t tcp = uwr->tcp;
+	const char *addr;
+	int port;
+	int err;
+
+	addr = luaL_checkstring(L, 2); 
+	port = luaL_checkinteger(L, 3);
+
+	if (uwr->connect != LUA_REFNIL)
+		luaL_unref(L, LUA_REGISTRYINDEX, uwr->connect);
+	uwr->connect = luaL_ref(L, LUA_REGISTRYINDEX);
+
+	if (uwr->is_ipv4)
+		err = xu_tcp_connect(tcp, addr, port, __on_connect);
+	else 
+		err = xu_tcp_connect6(tcp, addr, port, __on_connect);
+
+	lua_pushboolean(L, err == 0);
+	return 1;
+}
+
+static int __sock_tcp_bind(lua_State *L)
+{
+	struct tcp_wrap *twr = TCP();
+	xu_tcp_t tcp = twr->tcp;
+	const char *addr = NULL;
+	int port, err;
+	int top = lua_gettop(L);
+
+	switch (top) {
+		case 3:
+			addr = luaL_checkstring(L, 2);  /* <2> address */
+			port = luaL_checkinteger(L, 3); /* <3> port */
+			break;
+		case 2:
+			port = luaL_checkinteger(L, 2); /* <2> only port */
+			break;
+		default:
+			return 0;
+	}
+
+	if (twr->is_ipv4)
+		err = xu_tcp_bind(tcp, addr, port);
+	else
+		err = xu_tcp_bind6(tcp, addr, port);
+	lua_pushboolean(L, err == 0);
+	return 1;
+}
+
+static void __sock_stream(lua_State *L, xuctx_t ctx)
+{
+	static luaL_Reg sd[] = {
+		{"new", __sock_tcp_new},
+		{"newWithFd", __sock_tcp_new_with_fd},
+		{NULL, NULL}
+	};
+
+	static luaL_Reg mt_sd[] = {
+		{"close", __sock_tcp_close},
+		{"recvStart", __sock_tcp_recv_start},
+		{"recvStop",  __sock_tcp_recv_stop},
+		{"bind",      __sock_tcp_bind},
+		{"listen",    __sock_tcp_listen},
+		{"connect",   __sock_tcp_connect},
+		{"send",      __sock_tcp_send},
+		{"onSend",    __sock_tcp_on_send},
+		{"__gc",      __sock_tcp_close},
+		{NULL, NULL}
+	};
+
+	__create_metatable(L, SOCK_MTSTREAM, mt_sd);
+	lua_pushlightuserdata(L, ctx);
+	luaL_openlib(L, "Tcp", sd, 1);
+	lua_pop(L, 1);
+}
+
+void init_lua_net(lua_State *L, xuctx_t ctx)
 {
 	__sock_addr_mt(L);
 	__sock_dgram(L, ctx);
+	__sock_stream(L, ctx);
 }
 

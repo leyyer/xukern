@@ -26,6 +26,6 @@ void * xu_ctx_loop(xuctx_t ctx);
  * builtin lua objects.
  */
 void init_lua_buffer(lua_State *L);
-void init_lua_udp(lua_State *L, xuctx_t);
+void init_lua_net(lua_State *L, xuctx_t);
 #endif
 

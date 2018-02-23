@@ -130,9 +130,9 @@ xuctx_t xu_ctx_new()
 	lua_pop(L, 1);
 
 	init_lua_buffer(L);
-	init_lua_udp(L, ctx);
+	init_lua_net(L, ctx);
 
-	printf("top = %d\n", lua_gettop(L));
+	//xu_println("top = %d", lua_gettop(L));
 	return ctx;
 }
 

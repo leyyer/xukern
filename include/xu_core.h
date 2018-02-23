@@ -9,6 +9,10 @@ extern "C" {
 #include "rwlock.h"
 #include "spinlock.h"
 
+#define container_of(ptr, type, member) ({              \
+		const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+		(type *)( (char *)__mptr - offsetof(type,member) );})
+
 typedef struct xu_ctx * xuctx_t;
 /* 
  * initialize the xucore library
@@ -89,6 +93,56 @@ struct xu_buf {
 	size_t len;
 };
 
+/*
+ * TCP
+ */
+typedef struct xu_tcp *xu_tcp_t;
+
+/*
+ * create from tcp handle.
+ */
+xu_tcp_t xu_tcp_open(xuctx_t);
+xu_tcp_t xu_tcp_open_with_fd(xuctx_t, int fd);
+
+void xu_tcp_close(xu_tcp_t tcp);
+/*
+ * cookie data.
+ */
+void xu_tcp_set_data(xu_tcp_t tcp, void *data);
+void *xu_tcp_get_data(xu_tcp_t tcp);
+
+/*
+ * Buffer size.
+ *
+ * if *value == 0, get buffer size, otherwise set buffer size.
+ */
+int xu_tcp_recv_buffer_size(xu_tcp_t tcp, int *value);
+int xu_tcp_send_buffer_size(xu_tcp_t tcp, int *value);
+
+/*
+ * tcp nodelay.
+ */
+int xu_tcp_nodelay(xu_tcp_t tcp, int enable);
+
+/*
+ * keep alive
+ */
+int xu_tcp_keepalive(xu_tcp_t tcp, int enable, int delay_in_seconds);
+
+/*
+ * bind.
+ */
+int xu_tcp_bind(xu_tcp_t tcp, const char *address, int port);
+int xu_tcp_bind6(xu_tcp_t tcp, const char *address, int port);
+
+int xu_tcp_listen(xu_tcp_t tcp, int backlog, void (*on_con)(xu_tcp_t server, xu_tcp_t client, int status));
+int xu_tcp_connect(xu_tcp_t tcp, const char *addr, int port, void (*con)(xu_tcp_t, int status));
+int xu_tcp_connect6(xu_tcp_t tcp, const char *addr, int port, void (*con)(xu_tcp_t, int status));
+
+int xu_tcp_send(xu_tcp_t tcp, struct xu_buf buf[], int nbuf, void (*cb)(xu_tcp_t, int status));
+
+int xu_tcp_recv_start(xu_tcp_t tcp, void (*cb)(xu_tcp_t, const void *buf, int len));
+int xu_tcp_recv_stop(xu_tcp_t tcp);
 /* 
  * UDP
  */

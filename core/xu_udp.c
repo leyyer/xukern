@@ -23,7 +23,7 @@ xu_udp_t xu_udp_open(xuctx_t ctx)
 		xu_free(udp);
 		return NULL;
 	}
-	uv_handle_set_data((uv_handle_t *)&udp->handle, udp);
+	uv_handle_set_data((uv_handle_t *)&udp->handle, ctx);
 	return udp;
 }
 
@@ -43,13 +43,13 @@ xu_udp_t xu_udp_open_with_fd(xuctx_t ctx, int fd)
 		return NULL;
 	}
 
-	uv_handle_set_data((uv_handle_t *)&udp->handle, udp);
+	uv_handle_set_data((uv_handle_t *)&udp->handle, ctx);
 	return udp;
 }
 
 static void __free(uv_handle_t *h)
 {
-	xu_udp_t udp = uv_handle_get_data(h);
+	xu_udp_t udp = (xu_udp_t)h;
 	xu_println("udp freeing %p", h);
 	xu_free(udp);
 }
@@ -64,6 +64,9 @@ int xu_udp_bind(xu_udp_t udp, const char *addr, int port)
 {
 	struct sockaddr_in saddr;
 
+	if (addr == NULL) {
+		addr = "0.0.0.0";
+	}
 	if (uv_ip4_addr(addr, port, &saddr))
 		return -1;
 	return uv_udp_bind(&udp->handle, (struct sockaddr *)&saddr, UV_UDP_REUSEADDR);
@@ -73,6 +76,9 @@ int xu_udp_bind6(xu_udp_t udp, const char *addr, int port)
 {
 	struct sockaddr_in6 saddr;
 
+	if (addr == NULL) {
+		addr = "::0";
+	}
 	if (uv_ip6_addr(addr, port, &saddr))
 		return -1;
 	return uv_udp_bind(&udp->handle, (struct sockaddr *)&saddr, UV_UDP_REUSEADDR);
