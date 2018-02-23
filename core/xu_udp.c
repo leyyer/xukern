@@ -13,7 +13,7 @@ struct udp_send_req {
 	void (*cb)(xu_udp_t, int status);
 };
 
-xu_udp_t xu_udp_new(xuctx_t ctx)
+xu_udp_t xu_udp_open(xuctx_t ctx)
 {
 	xu_udp_t udp;
 
@@ -27,7 +27,7 @@ xu_udp_t xu_udp_new(xuctx_t ctx)
 	return udp;
 }
 
-xu_udp_t xu_udp_new_with_fd(xuctx_t ctx, int fd)
+xu_udp_t xu_udp_open_with_fd(xuctx_t ctx, int fd)
 {
 	xu_udp_t udp;
 
@@ -54,7 +54,7 @@ static void __free(uv_handle_t *h)
 	xu_free(udp);
 }
 
-void xu_udp_free(xu_udp_t udp)
+void xu_udp_close(xu_udp_t udp)
 {
 	if (uv_is_active((uv_handle_t *)&udp->handle) || !uv_is_closing((uv_handle_t *)&udp->handle))
 		uv_close((uv_handle_t *)&udp->handle, __free);

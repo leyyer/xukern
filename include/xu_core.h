@@ -97,16 +97,16 @@ typedef struct xu_udp* xu_udp_t;
 /* 
  * create udp handle.
  */
-xu_udp_t xu_udp_new(xuctx_t ctx);
+xu_udp_t xu_udp_open(xuctx_t ctx);
 
 /*
  * create udp handle with `fd'
  */
-xu_udp_t xu_udp_new_with_fd(xuctx_t ctx, int fd);
+xu_udp_t xu_udp_open_with_fd(xuctx_t ctx, int fd);
 /*
  * free udp handle.
  */
-void xu_udp_free(xu_udp_t udp);
+void xu_udp_close(xu_udp_t udp);
 
 /*
  * set cookie data.

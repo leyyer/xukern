@@ -118,9 +118,9 @@ static int __sock_udp_new__(lua_State *L, int fd)
 	}
 
 	if (fd < 0)
-		udp = xu_udp_new(ctx);
+		udp = xu_udp_open(ctx);
 	else
-		udp = xu_udp_new_with_fd(ctx, fd);
+		udp = xu_udp_open_with_fd(ctx, fd);
 
 	if (!udp)
 		return 0;
@@ -193,7 +193,7 @@ static int __sock_udp_close(lua_State *L)
 	luaL_unref(L, LUA_REGISTRYINDEX, uwr->send);
 	uwr->recv  = LUA_REFNIL;
 	uwr->send = LUA_REFNIL;
-	xu_udp_free(udp);
+	xu_udp_close(udp);
 	return 0;
 }
 
