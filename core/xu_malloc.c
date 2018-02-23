@@ -5,10 +5,6 @@
 
 #ifdef USE_JEMALLOC
 #include "jemalloc/jemalloc.h"
-#define malloc  je_malloc
-#define calloc  je_calloc
-#define realloc je_realloc
-#define free    je_free
 #endif
 
 static void __oom(size_t size)
@@ -20,7 +16,12 @@ static void __oom(size_t size)
 
 void *xu_calloc(size_t n, size_t size)
 {
-	void *p = calloc(n, size);
+	void *p;
+#ifdef USE_JEMALLOC
+	p = je_calloc(n, size);
+#else
+	p = calloc(n, size);
+#endif
 
 	if (!p) {
 		__oom(size);
@@ -31,7 +32,13 @@ void *xu_calloc(size_t n, size_t size)
 
 void *xu_realloc(void *p, size_t size)
 {
-	void *np = realloc(p, size);
+	void *np;
+
+#ifdef USE_JEMALLOC
+	np = je_realloc(p, size);
+#else
+	np = realloc(p, size);
+#endif
 
 	if (!np) {
 		__oom(size);
@@ -43,7 +50,11 @@ void *xu_realloc(void *p, size_t size)
 void  xu_free(void *p)
 {
 	if (p) {
+#ifdef USE_JEMALLOC
+		je_free(p);
+#else
 		free(p);
+#endif
 	}
 }
 

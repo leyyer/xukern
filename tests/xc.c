@@ -13,6 +13,8 @@ int main(int argc, char *argv[])
 
 	xu_ctx_load(ctx, argv[1]);
 
+	xu_udp_t udp = xu_udp_new(ctx);
+	xu_udp_free(udp);
 	xu_ctx_run(ctx);
 
 	xu_core_exit();

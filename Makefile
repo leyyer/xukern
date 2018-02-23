@@ -12,18 +12,23 @@ LUAJIT_DIR := $(TOP)/3rd/luajit
 CJSON_DIR  := $(TOP)/3rd/cJSON
 LIBEV_DIR  := $(TOP)/3rd/libev/src
 LIBUV_DIR  := $(TOP)/3rd/libuv
-RD3ROOT    := $(TOP)/3rd/usr
+JEMALLOC_DIR  := $(TOP)/3rd/jemalloc
+RD3ROOT    := $(TOP)/usr
 
 LINKLIBS := -ldl -lpthread -lm
 
 #DEBUG_FLAG := -O2
 DEBUG_FLAG := -O0 -g -ggdb
 
-LINK_ARCHIVES := -Wl,-whole-archive -lcjson -luv -lluajit-5.1 -Wl,-no-whole-archive
+LINK_ARCHIVES := -Wl,-whole-archive -lcjson -luv -ljemalloc_pic -lluajit-5.1 -Wl,-no-whole-archive
 
-CFLAGS  += -I$(TOP)/include -I$(RD3ROOT)/include -std=gnu99 -Wall $(DEBUG_FLAG) \
+CFLAGS  += -I$(TOP)/include -I$(RD3ROOT)/include -I$(TOP)/core -std=gnu99 -Wall \
+		   $(DEBUG_FLAG) -DUSE_JEMALLOC \
 		   -I$(RD3ROOT)/include/luajit-2.0 -I$(RD3ROOT)/include/cjson -fPIC
 LDFLAGS += -L$(TOP) -L$(RD3ROOT)/lib -Wl,--start-group $(LINKLIBS) -Wl,--end-group
+
+LUA_OBJS := core/builtin/lua_buffer.o \
+			core/builtin/lua_udp.o \
 
 OBJS += core/xu_utils.o \
 		core/xu_malloc.o \
@@ -31,6 +36,9 @@ OBJS += core/xu_utils.o \
 		core/xu_init.o \
 		core/xu_env.o \
 		core/xu_ctx.o \
+		core/xu_udp.o \
+
+OBJS += $(LUA_OBJS)
 
 all: libxucore.so demo
 
@@ -38,7 +46,7 @@ libxucore.so : $(OBJS)
 	$(CC) -shared $(LDFLAGS) $(LINK_ARCHIVES) -o $@ $^
 
 luajit:
-	$(MAKE) HOST_CC=gcc STATIC_CC=$(CC) PREFIX=/usr CFLAGS='-fPIC -O2' DYNAMIC_CC='$(CC) -fPIC' TARGET_LD=$(CC) TARGET_AR='$(AR) rcs' TARGET_STRIP=$(STRIP) DESTDIR=$(TOP)/3rd -C $(LUAJIT_DIR) install clean
+	$(MAKE) HOST_CC=gcc STATIC_CC=$(CC) PREFIX=/usr CFLAGS='-fPIC -O2' DYNAMIC_CC='$(CC) -fPIC' TARGET_LD=$(CC) TARGET_AR='$(AR) rcs' TARGET_STRIP=$(STRIP) DESTDIR=$(TOP) -C $(LUAJIT_DIR) install clean
 
 cJSON:
 	(cd $(CJSON_DIR) && git checkout -f && sed -i 's/gcc/arm-linux-gcc/g' $(CJSON_DIR)/Makefile)
@@ -55,6 +63,12 @@ libuv:
 	@(cd $(LIBUV_DIR); [ -f configure ] || sh autogen.sh)
 	(cd $(LIBUV_DIR) && ./configure --prefix=$(RD3ROOT) --host=$(CROSS_COMPILE) --disable-shared)
 	$(MAKE) -C $(LIBUV_DIR) install distclean
+	@rm -rf $(RD3ROOT)/lib/*.la
+
+jemalloc:
+	@(cd $(JEMALLOC_DIR); [ -f configure ] || sh autogen.sh)
+	(cd $(JEMALLOC_DIR) && ./configure --prefix=$(RD3ROOT) --host=$(CROSS_COMPILE) --disable-shared --with-jemalloc-prefix=je_)
+	$(MAKE) -C $(JEMALLOC_DIR) install distclean
 	@rm -rf $(RD3ROOT)/lib/*.la
 
 dependence: cJSON luajit libuv

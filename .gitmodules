@@ -10,3 +10,6 @@
 [submodule "3rd/libuv"]
 	path = 3rd/libuv
 	url = https://github.com/libuv/libuv.git
+[submodule "3rd/jemalloc"]
+	path = 3rd/jemalloc
+	url = https://github.com/jemalloc/jemalloc.git

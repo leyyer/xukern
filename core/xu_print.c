@@ -9,19 +9,27 @@
 
 #define LOG_MSG_SIZE (256)
 
-static void fallback(const char *msg, int len)
+static logger_t __printer  = NULL;
+static void *   __log_data = NULL;
+
+static void __do_print(const char *msg, int len)
 {
-	fprintf(stderr, "%s\n", msg);
-	fflush(stderr);
+	if (__printer) {
+		__printer(__log_data, msg, len);
+		__printer(__log_data, "\n", 1);
+	} else {
+		fprintf(stderr, "%s\n", msg);
+		fflush(stderr);
+	}
 }
 
-static logger_t __printer = fallback;
-
-logger_t xu_set_logger(logger_t f)
+void xu_set_logger(void *ud, logger_t f)
 {
 	logger_t saved = __printer;
+	void *ds = __log_data;
+
 	ATOM_CAS_POINTER(&__printer, saved, f);
-	return saved;
+	ATOM_CAS_POINTER(&__log_data, ds, ud);
 }
 
 int xu_println(const char *msg, ...) 
@@ -56,12 +64,33 @@ int xu_println(const char *msg, ...)
 		return -1;
 	}
 
-	if (__printer)
-		__printer(msg, len);
+	__do_print(data, len);
 
 	if (data != tmp) {
 		xu_free(data);
 	}
 	return (len);
+}
+
+int xu_log_blob(void *buf, int len)
+{
+	char tmp[LOG_MSG_SIZE] = {0};
+	char item[8] = {0};
+	const char *p = buf;
+	int i = 0;
+
+	while (i < len) {
+		sprintf(item, "%02x ", p[i]);
+		strcat(tmp, item);
+		++i;
+		if ((i % 16) == 0) {
+			__do_print(tmp, strlen(tmp));
+			tmp[0] = '\0';
+		}
+	}
+
+	__do_print(tmp, strlen(tmp));
+
+	return (i);
 }
 

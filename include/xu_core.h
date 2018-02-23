@@ -3,8 +3,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 #include <stddef.h>
+
 #include "atomic.h"
 #include "rwlock.h"
 #include "spinlock.h"
@@ -77,6 +77,89 @@ const char *xu_getenv(const char *env, char *buf, size_t size);
  */
 void xu_setenv(const char *env, const char *value);
 
+/* object functions */
+struct xu_buf {
+	char   *base;
+	size_t len;
+};
+
+/* 
+ * UDP
+ */
+typedef struct xu_udp* xu_udp_t;
+
+/* 
+ * create udp handle.
+ */
+xu_udp_t xu_udp_new(xuctx_t ctx);
+
+/*
+ * free udp handle.
+ */
+void xu_udp_free(xu_udp_t udp);
+
+/*
+ * set cookie data.
+ */
+void xu_udp_set_data(xu_udp_t udp, void *data);
+
+/*
+ * get cookied data.
+ */
+void *xu_udp_get_data(xu_udp_t udp);
+
+/*
+ * bind local ipv4 address.
+ *
+ * return < 0 on error, 0 on success.
+ */
+int xu_udp_bind(xu_udp_t udp, const char *addr, int port);
+
+/*
+ * bind local ipv6 address.
+ *
+ * return < 0 on error, 0 on success.
+ */
+int xu_udp_bind6(xu_udp_t udp, const char *addr, int port);
+
+/*
+ * udp send data.
+ */
+int xu_udp_send(xu_udp_t udp, struct xu_buf buf[], int nbuf, const char *addr, int port, void (*cb)(xu_udp_t, int status));
+
+/*
+ * ipv6 udp send.
+ */
+int xu_udp_send6(xu_udp_t udp, struct xu_buf buf[], int nbuf, const char *addr, int port, void (*cb)(xu_udp_t, int status));
+
+/*
+ * udp group operation.
+ */
+int xu_udp_add_membership(xu_udp_t udp, const char *mulitcast_addr, const char *interface_addr);
+int xu_udp_drop_membership(xu_udp_t udp, const char *mulitcast_addr, const char *interface_addr);
+int xu_udp_set_multicast_interface(xu_udp_t udp, const char *interface_addr);
+/* 
+ * options.
+ */
+int xu_udp_set_multicast_loopback(xu_udp_t udp, int on);
+int xu_udp_set_multicast_ttl(xu_udp_t udp, int ttl);
+int xu_udp_set_ttl(xu_udp_t udp, int ttl);
+int xu_udp_set_broadcast(xu_udp_t udp, int on);
+
+/*
+ * start recv data.
+ */
+struct sockaddr;
+int xu_udp_recv_start(xu_udp_t udp, void (*recv)(xu_udp_t, const void *buf, int nread, const struct sockaddr *addr));
+/*
+ * stop recv udp data.
+ */
+int xu_udp_recv_stop(xu_udp_t udp);
+
+/*
+ * query local address.
+ */
+int xu_udp_address(xu_udp_t udp, struct sockaddr *addr, int *size);
 #ifdef __cplusplus
 }
 #endif
