@@ -31,6 +31,7 @@ xuctx_t xu_ctx_new(void);
  * run ctx loop.
  */
 int xu_ctx_run(xuctx_t ctx);
+int xu_ctx_run_once(xuctx_t ctx);
 
 /*
  * load a script file.
@@ -40,6 +41,11 @@ int xu_ctx_run(xuctx_t ctx);
  * return 0: on success, < 0 on error.
  */
 int xu_ctx_load(xuctx_t ctx, const char *file);
+
+/*
+ * stop running context.
+ */
+void xu_ctx_stop(xuctx_t ctx);
 
 /*
  * load environ value from file.
@@ -93,6 +99,10 @@ typedef struct xu_udp* xu_udp_t;
  */
 xu_udp_t xu_udp_new(xuctx_t ctx);
 
+/*
+ * create udp handle with `fd'
+ */
+xu_udp_t xu_udp_new_with_fd(xuctx_t ctx, int fd);
 /*
  * free udp handle.
  */
@@ -160,6 +170,15 @@ int xu_udp_recv_stop(xu_udp_t udp);
  * query local address.
  */
 int xu_udp_address(xu_udp_t udp, struct sockaddr *addr, int *size);
+
+/*
+ * buffer size.
+ *
+ * if *value == 0 get buffer size, otherwise set buffer size.
+ */
+int xu_udp_recv_buffer_size(xu_udp_t udp, int *value);
+int xu_udp_send_buffer_size(xu_udp_t udp, int *value);
+
 #ifdef __cplusplus
 }
 #endif

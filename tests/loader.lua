@@ -64,20 +64,21 @@ print ("done")
 
 --[--[
 local udp = Udp.new("udp4")
-print(udp:bind(8888))
+print(udp:bind("192.168.111.128", 8888))
 function recv(s, b, peer)
-	print("recv ".. s)
-	print("peer address " .. peer:address())
+	print("recv <".. s .. "> ")
+	print("peer address " .. peer:address() .. ':' .. peer:port())
 	print(b)
 	if b ~= nil then
 		print(b:toString())
 	end
 	print(udp:send(peer:address(), peer:port(), b))
-	peer = nil
+--[[	peer = nil
 	b = nil
 	print("before collect: " .. collectgarbage("count"))
 	collectgarbage("collect")
 	print("after collect: " .. collectgarbage("count"))
+--]]
 end
 
 print(udp:recvStart(recv))

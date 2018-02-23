@@ -27,6 +27,26 @@ xu_udp_t xu_udp_new(xuctx_t ctx)
 	return udp;
 }
 
+xu_udp_t xu_udp_new_with_fd(xuctx_t ctx, int fd)
+{
+	xu_udp_t udp;
+
+	udp = xu_calloc(1, sizeof *udp);
+
+	if (uv_udp_init(xu_ctx_loop(ctx), &udp->handle)) {
+		xu_free(udp);
+		return NULL;
+	}
+
+	if (uv_udp_open(&udp->handle, fd) != 0) {
+		xu_free(udp);
+		return NULL;
+	}
+
+	uv_handle_set_data((uv_handle_t *)&udp->handle, udp);
+	return udp;
+}
+
 static void __free(uv_handle_t *h)
 {
 	xu_udp_t udp = uv_handle_get_data(h);
@@ -199,5 +219,15 @@ int xu_udp_recv_start(xu_udp_t udp, void (*recv)(xu_udp_t, const void *buf, ssiz
 int xu_udp_recv_stop(xu_udp_t udp)
 {
 	return uv_udp_recv_stop(&udp->handle);
+}
+
+int xu_udp_recv_buffer_size(xu_udp_t udp, int *value)
+{
+	return uv_recv_buffer_size((uv_handle_t *)&udp->handle, value);
+}
+
+int xu_udp_send_buffer_size(xu_udp_t udp, int *value)
+{
+	return uv_send_buffer_size((uv_handle_t *)&udp->handle, value);
 }
 

@@ -56,6 +56,49 @@ static int __println(lua_State *L)
 	return 0;
 }
 
+static int __sleep(lua_State *L)
+{
+	int n = luaL_checkinteger(L, 1);
+	sleep(n);
+
+	return 0;
+}
+
+static int __usleep(lua_State *L)
+{
+	int n = luaL_checkinteger(L, 1);
+
+	usleep(n);
+	return 0;
+}
+
+static int __stop(lua_State *L)
+{
+	xuctx_t ctx = lua_touserdata(L, lua_upvalueindex(1));
+
+	xu_ctx_stop(ctx);
+
+	return 0;
+}
+
+static int __run(lua_State *L)
+{
+	xuctx_t ctx = lua_touserdata(L, lua_upvalueindex(1));
+
+	xu_ctx_run(ctx);
+
+	return 0;
+}
+
+static int __run_once(lua_State *L)
+{
+	xuctx_t ctx = lua_touserdata(L, lua_upvalueindex(1));
+
+	xu_ctx_run_once(ctx);
+
+	return 0;
+}
+
 xuctx_t xu_ctx_new()
 {
 	lua_State *L;
@@ -65,6 +108,11 @@ xuctx_t xu_ctx_new()
 		{"setenv", __setenv},
 		{"getenv", __getenv},
 		{"println", __println},
+		{"sleep", __sleep},
+		{"usleep", __usleep},
+		{"run",  __run},
+		{"runOnce",  __run_once},
+		{"stop", __stop},
 		{NULL, NULL}
 	};
 
@@ -93,6 +141,7 @@ int xu_ctx_load(xuctx_t ctx, const char *file)
 	int r;
 	lua_State *L = ctx->L;
 
+	lua_settop(L, 0);
 	lua_pushcfunction(L, xu_luatraceback);
 	r = luaL_loadfile(L, file);
 	if (r != 0) {
@@ -112,6 +161,16 @@ int xu_ctx_load(xuctx_t ctx, const char *file)
 int xu_ctx_run(xuctx_t ctx)
 {
 	return uv_run(ctx->loop, UV_RUN_DEFAULT);
+}
+
+int xu_ctx_run_once(xuctx_t ctx)
+{
+	return uv_run(ctx->loop, UV_RUN_ONCE);
+}
+
+void xu_ctx_stop(xuctx_t ctx)
+{
+	uv_stop(ctx->loop);
 }
 
 void *xu_ctx_loop(xuctx_t ctx)

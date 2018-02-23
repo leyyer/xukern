@@ -25,6 +25,18 @@ static int __buf_alloc(lua_State *L)
 	return 1;
 }
 
+static int __buf_from_string(lua_State *L)
+{
+	struct buffer *b;
+	const char *s;
+	size_t sz = 0;
+
+	s = luaL_checklstring(L, 1, &sz);
+	b = buffer_new(L, sz);
+	memcpy(b->data, s, sz);
+	return 1;
+}
+
 static int __buf_cap(lua_State *L)
 {
 	struct buffer *b = BUFFER(1);
@@ -133,6 +145,7 @@ void init_lua_buffer(lua_State *L)
 {
 	static luaL_reg buf[] = {
 		{"alloc", __buf_alloc},
+		{"fromString", __buf_from_string},
 		{NULL, NULL}
 	};
 

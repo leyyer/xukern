@@ -99,10 +99,10 @@ struct udp_wrap {
 	lua_State *L;
 	int is_ipv4;
 	int recv;
-	int error;
+	int send;
 };
 
-static int __sock_udp_new(lua_State *L)
+static int __sock_udp_new__(lua_State *L, int fd)
 {
 	struct udp_wrap *uwr;
 	xu_udp_t udp;
@@ -117,7 +117,10 @@ static int __sock_udp_new(lua_State *L)
 		ipv4 = 0;
 	}
 
-	udp = xu_udp_new(ctx);
+	if (fd < 0)
+		udp = xu_udp_new(ctx);
+	else
+		udp = xu_udp_new_with_fd(ctx, fd);
 
 	if (!udp)
 		return 0;
@@ -127,7 +130,7 @@ static int __sock_udp_new(lua_State *L)
 	uwr->udp = udp;
 	uwr->is_ipv4 = ipv4;
 	uwr->recv = LUA_REFNIL;
-	uwr->error = LUA_REFNIL;
+	uwr->send = LUA_REFNIL;
 	uwr->L = L;
 	xu_udp_set_data(udp, uwr);
 
@@ -135,6 +138,17 @@ static int __sock_udp_new(lua_State *L)
 	lua_setmetatable(L, -2);
 
 	return 1;
+}
+
+static int __sock_udp_new(lua_State *L)
+{
+	return __sock_udp_new__(L, -1);
+}
+
+static int __sock_udp_new_with_fd(lua_State *L)
+{
+	int fd = luaL_checkinteger(L, 1);
+	return __sock_udp_new__(L, fd);
 }
 
 static int __sock_udp_bind(lua_State *L)
@@ -176,9 +190,9 @@ static int __sock_udp_close(lua_State *L)
 	xu_udp_t udp = uwr->udp;
 
 	luaL_unref(L, LUA_REGISTRYINDEX, uwr->recv);
-	luaL_unref(L, LUA_REGISTRYINDEX, uwr->error);
+	luaL_unref(L, LUA_REGISTRYINDEX, uwr->send);
 	uwr->recv  = LUA_REFNIL;
-	uwr->error = LUA_REFNIL;
+	uwr->send = LUA_REFNIL;
 	xu_udp_free(udp);
 	return 0;
 }
@@ -204,7 +218,13 @@ static void __on_recv(xu_udp_t udp, const void *data, int nread, const struct so
 	uwr = xu_udp_get_data(udp);
 	L = uwr->L;
 	if (uwr->recv != LUA_REFNIL) {
-		lua_pushcfunction(L, xu_luatraceback);
+		int top = lua_gettop(L);
+		xu_println("%s: top = %d", __func__, top);
+		if (top != 1) {
+			lua_pushcfunction(L, xu_luatraceback);
+		} else {
+			assert(top == 1);
+		}
 		lua_rawgeti(L, LUA_REGISTRYINDEX, uwr->recv);
 		lua_pushinteger(L, nread); /* <1>: length */
 		if (nread > 0) {           /* <2>: buffer or nil */
@@ -246,18 +266,19 @@ skip:
 	return 1;
 }
 
-static int __sock_udp_on_error(lua_State *L)
+static int __sock_udp_on_send(lua_State *L)
 {
 	struct udp_wrap *uwr = UDP();
-	int err = -1;
+	int err = 0;
 
 	if (lua_type(L, 2) != LUA_TFUNCTION) {
+		err = -1;
 		goto skip;
 	}
-	if (uwr->error != LUA_REFNIL) {
-		luaL_unref(L, LUA_REGISTRYINDEX, uwr->error);
+	if (uwr->send != LUA_REFNIL) {
+		luaL_unref(L, LUA_REGISTRYINDEX, uwr->send);
 	}
-	uwr->error = luaL_ref(L, LUA_REGISTRYINDEX);
+	uwr->send = luaL_ref(L, LUA_REGISTRYINDEX);
 skip:
 	lua_pushboolean(L, err == 0);
 	return 1;
@@ -279,21 +300,24 @@ static int __sock_udp_recv_stop(lua_State *L)
 static void __on_send(xu_udp_t udp, int status)
 {
 	struct udp_wrap *uwr;
-	int r;
+	int r, top;
 	lua_State *L;
 
-	if (status != 0) {
-		uwr = xu_udp_get_data(udp);
+	uwr = xu_udp_get_data(udp);
+	if (uwr->send != LUA_REFNIL) {
 		L = uwr->L;
-		if (uwr->error != LUA_REFNIL) {
+		top = lua_gettop(L);
+		if (top != 1) {
 			lua_pushcfunction(L, xu_luatraceback);
-			lua_rawgeti(L, LUA_REGISTRYINDEX, uwr->recv);
-			lua_pushinteger(L, status); /* <1>: status */
-			r = lua_pcall(L, 1, 0, 1);
-			if (r != 0) {
-				xu_println("%s: %s", __func__, lua_tostring(L, -1));
-				lua_pop(L, 1);
-			}
+		} else {
+			assert(top == 1);
+		}
+		lua_rawgeti(L, LUA_REGISTRYINDEX, uwr->recv);
+		lua_pushinteger(L, status); /* <1>: status */
+		r = lua_pcall(L, 1, 0, 1);
+		if (r != 0) {
+			xu_println("%s: %s", __func__, lua_tostring(L, -1));
+			lua_pop(L, 1);
 		}
 	}
 	xu_println("send status %d", status);
@@ -324,11 +348,11 @@ static int __sock_udp_send(lua_State *L)
 				xb.base = buf->data;
 				xb.len = buf->cap;
 			} else {
-				err = -22;
+				err = -1;
 			}
 			break;
 		default:
-			err = -22;
+			err = -2;
 			break;
 	}
 
@@ -463,13 +487,73 @@ static int __sock_udp_ttl(lua_State *L)
 	err = xu_udp_set_ttl(udp, on);
 
 	lua_pushboolean(L, err == 0);
+
 	return 1;
+}
+
+static int __sock_get_recv_buffer_size(lua_State *L)
+{
+	struct udp_wrap *uwr = UDP();
+	xu_udp_t udp = uwr->udp;
+	int value = 0;
+	int err;
+
+	err = xu_udp_recv_buffer_size(udp, &value);
+	lua_pushinteger(L, value);
+	lua_pushboolean(L, err == 0);
+
+	return 2;
+}
+
+static int __sock_get_send_buffer_size(lua_State *L)
+{
+	struct udp_wrap *uwr = UDP();
+	xu_udp_t udp = uwr->udp;
+	int value = 0;
+	int err;
+
+	err = xu_udp_send_buffer_size(udp, &value);
+	lua_pushinteger(L, value);
+	lua_pushboolean(L, err == 0);
+
+	return 2;
+}
+
+static int __sock_set_recv_buffer_size(lua_State *L)
+{
+	struct udp_wrap *uwr = UDP();
+	xu_udp_t udp = uwr->udp;
+	int value;
+	int err;
+
+	value = luaL_checkinteger(L, 2);
+	err = xu_udp_recv_buffer_size(udp, &value);
+	lua_pushinteger(L, value);
+	lua_pushboolean(L, err == 0);
+
+	return 2;
+}
+
+static int __sock_set_send_buffer_size(lua_State *L)
+{
+	struct udp_wrap *uwr = UDP();
+	xu_udp_t udp = uwr->udp;
+	int value;
+	int err;
+
+	value = luaL_checkinteger(L, 2);
+	err = xu_udp_send_buffer_size(udp, &value);
+	lua_pushinteger(L, value);
+	lua_pushboolean(L, err == 0);
+
+	return 2;
 }
 
 static void __sock_dgram(lua_State *L, xuctx_t ctx)
 {
 	static luaL_Reg sd[] = {
 		{"new", __sock_udp_new},
+		{"newWithFd", __sock_udp_new_with_fd},
 		{NULL, NULL}
 	};
 
@@ -485,10 +569,14 @@ static void __sock_dgram(lua_State *L, xuctx_t ctx)
 		{"setMulticastInterface", __sock_udp_set_multicast_interface},
 		{"setMulticastLoopback", __sock_udp_multicast_loopback},
 		{"setMulticastTTL",     __sock_udp_multicast_ttl},
+		{"getRecvBufferSize", __sock_get_recv_buffer_size},
+		{"getSendBufferSize", __sock_get_send_buffer_size},
+		{"setRecvBufferSize", __sock_set_recv_buffer_size},
+		{"setSendBufferSize", __sock_set_send_buffer_size},
 		{"setTTL",  __sock_udp_ttl},
 		{"setBroadcast", __sock_udp_set_broadcast},
-		{"onError",  __sock_udp_on_error},
-		{"__gc",     __sock_udp_close},
+		{"onSend",  __sock_udp_on_send},
+		{"__gc",    __sock_udp_close},
 		{NULL, NULL}
 	};
 	__create_metatable(L, SOCK_MTDGRAM, mt_sd);
