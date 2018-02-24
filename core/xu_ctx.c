@@ -103,9 +103,29 @@ static int __now(lua_State *L)
 {
 	xuctx_t ctx = lua_touserdata(L, lua_upvalueindex(1));
 	uint64_t n;
+#if 0
+	struct timespec ts;
 
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	n = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+	xu_println("now: %llu", uv_now(ctx->loop));
+#endif
 	n = uv_now(ctx->loop);
+
 	lua_pushinteger(L, n);
+
+	return 1;
+}
+
+static int __load(lua_State *L)
+{
+	int err;
+	const char *file;
+	xuctx_t ctx = lua_touserdata(L, lua_upvalueindex(1));
+
+	file = luaL_checkstring(L, 1);
+	err = xu_ctx_load(ctx, file);
+	lua_pushboolean(L, err == 0);
 
 	return 1;
 }
@@ -122,6 +142,7 @@ xuctx_t xu_ctx_new()
 		{"now", __now},
 		{"sleep", __sleep},
 		{"usleep", __usleep},
+		{"load", __load},
 		{"run",  __run},
 		{"runOnce",  __run_once},
 		{"stop", __stop},

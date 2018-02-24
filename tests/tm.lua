@@ -1,4 +1,5 @@
-tm = Timer.new()
+tm = Timer.newTimerfd()
+--tm = Timer.new()
 
 function on_timer()
 	print(xucore.now())
