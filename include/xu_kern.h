@@ -14,6 +14,7 @@ extern "C"
 #define MTYPE_TAG_DASINT   0x20000
 
 #define MTYPE_TIMEOUT 1
+#define MTYPE_LOG     2
 
 #define XU_NAME_LEN (64)
 
@@ -26,7 +27,8 @@ struct xu_msg {
 struct queue;
 struct xu_actor;
 
-void xu_kern_start(const char *modpath, int threads);
+void xu_kern_init(int argc, char *argv[]);
+void xu_kern_start(void);
 
 typedef int (*xu_callback_t)(struct xu_actor *, void *ud, int type, uint32_t src, void *msg, size_t sz);
 
@@ -42,6 +44,9 @@ int xu_sendname(struct xu_actor * context, uint32_t source, const char *addr , i
 struct queue *xu_dispatch_message(struct queue *q, int weight);
 uint32_t xu_actor_findname(const char *name);
 const char *xu_actor_namehandle(uint32_t h, const char *name);
+uint32_t xu_actor_handle(struct xu_actor *);
+
+void xu_error(struct xu_actor * context, const char *msg, ...);
 
 /*
  * time api.

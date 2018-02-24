@@ -67,7 +67,7 @@ static void timer_loop(struct worker *w)
 static void start(int thread)
 {
 	int i;
-	uv_thread_t pid[thread+1];
+	uv_thread_t pid[thread];
 	struct worker *w = xu_malloc(sizeof *w);
 
 	w->count = thread;
@@ -83,26 +83,65 @@ static void start(int thread)
 	timer_loop(w);
 
 	for (i = 0; i < thread; ++i) {
-		uv_thread_join(&pid[i + 1]);
+		uv_thread_join(&pid[i]);
 	}
 
 	xu_free(w);
 }
 
-void xu_kern_start(const char *modpath, int threads)
+static void parsing(int argc, char *argv[])
+{
+	int i, c;
+	char *agv[argc];
+	/* parse arguments, copy argvs locals to parse.*/
+	for (i = 0; i < argc; ++i) {
+		agv[i] = xu_strdup(argv[i]);
+	}
+
+	while ((c = getopt(argc, agv, "c:?")) != -1) {
+		switch (c) {
+			case 'c':
+				xu_env_load(optarg);
+				break;
+		}
+	}
+
+	for (i = 0; i < argc; ++i) {
+		xu_free(agv[i]);
+	}
+}
+
+void xu_kern_init(int argc, char *argv[])
 {
 	static cJSON_Hooks hook = {
 		__malloc,
 		xu_free
 	};
+	const char *mod_path;
 
 	signal(SIGPIPE, SIG_IGN);
 
 	cJSON_InitHooks(&hook);
 	uv_replace_allocator(__malloc, xu_realloc, xu_calloc, xu_free);
+	xu_envinit();
+
+	parsing(argc, argv);
 
 	xu_timer_init();
-	xu_kern_init(modpath);
+	mod_path = xu_getenv("mod_path", NULL, 0);
+	xu_kern_global_init(mod_path ?: "./svc" );
+};
+
+void xu_kern_start()
+{
+	struct xu_actor *ctx;
+	int threads = 3;
+
+	ctx = xu_actor_new("logger", "");
+	if (ctx == NULL) {
+		xu_println("can't find logger");
+		exit(-1);
+	}
 	start(threads);
 }
 

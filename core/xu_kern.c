@@ -141,7 +141,7 @@ static struct xu_module *_load_module(const char *name)
 	xo = xu_calloc(1, size);
 	strcpy(xo->name, name);
 	xo->handle = dl;
-	if (!__open_sym(xo)) {
+	if (__open_sym(xo)) {
 		xu_free(xo);
 		return NULL;
 	}
@@ -238,6 +238,7 @@ static uint32_t xu_actor_register(struct xu_actor *xa)
 			int hash = handle & (_am->slot_size - 1);
 			if (_am->slot[hash] == NULL) {
 				_am->slot[hash] = xa;
+				_am->handle_index = handle + 1;
 				rwlock_wunlock(&_am->lock);
 				return handle;
 			}
@@ -318,6 +319,7 @@ static struct queue *xu_queue_new(uint32_t h)
 	SPIN_INIT(q);
 	q->in_global = 1;
 	q->drop = 0;
+	q->msgs = xu_calloc(q->cap, sizeof q->msgs[0]);
 	q->next = NULL;
 
 	return q;
@@ -381,7 +383,7 @@ static void __drop_q(struct queue *q)
 	struct xu_msg msg;
 
 	while (!xu_queue_get(q, &msg)) {
-		if (msg.sz > 0)
+		if ((msg.sz & MESSAGE_TYPE_MASK) > 0)
 			xu_free((void *)msg.data);
 	}
 	SPIN_RELEASE(q);
@@ -448,13 +450,13 @@ struct xu_actor *xu_actor_new(const char *name, const char *p)
 
 	m = xu_module_query(name);
 	if (!m) {
-		xu_println("can't find module %s", name);
+		xu_error(NULL, "can't find module %s", name);
 		return NULL;
 	}
 
 	ud = m->new();
 	if (ud == NULL) {
-		xu_println("module %s create failed.", name);
+		xu_error(NULL, "module %s create failed.", name);
 		return NULL;
 	}
 
@@ -473,7 +475,7 @@ struct xu_actor *xu_actor_new(const char *name, const char *p)
 		xu_queue_push(q);
 		return ctx;
 	} else {
-		xu_println("launch %s failed.", name);
+		xu_error(xa, "launch %s failed.", name);
 		uint32_t handle = xa->handle;
 		xu_actor_unref(xa);
 		xu_queue_free(q);
@@ -505,9 +507,8 @@ static void dispatch_message(struct xu_actor *ctx, struct xu_msg *msg)
 	size_t sz = msg->sz & MESSAGE_TYPE_MASK;
 
 	rmsg = ctx->cb(ctx, ctx->data, type, msg->source, (void *)msg->data, sz);
-	if (!rmsg) {
-		if (msg->sz > 0)
-			xu_free((void *)msg->data);
+	if (!rmsg && (sz > 0)) {
+		xu_free((void *)msg->data);
 	}
 }
 
@@ -539,7 +540,7 @@ struct queue *xu_dispatch_message(struct queue *q, int weight)
 		}
 
 		if (ctx->cb == NULL) {
-			if (msg.sz > 0)
+			if ((msg.sz & MESSAGE_TYPE_MASK) > 0)
 				xu_free((void *)msg.data);
 		} else {
 			dispatch_message(ctx, &msg);
@@ -609,10 +610,11 @@ static void __filter_args(struct xu_actor *ctx, int type, void **data, size_t *s
 	int needcopy = !(type & MTYPE_TAG_DONTCOPY);
 
 	type &= 0xff;
-	if (needcopy && *data) {
-		char *msg = xu_malloc(*sz + 1);
+	if (type & MTYPE_TAG_DASINT) {
+		*sz = 0;
+	} else if (needcopy && *data) {
+		char *msg = xu_malloc(*sz);
 		memcpy(msg, *data, *sz);
-		msg[*sz] = '\0';
 		*data = msg;
 	}
 	*sz |= (size_t)type << MESSAGE_TYPE_SHIFT;
@@ -633,7 +635,7 @@ int xu_send(struct xu_actor *ctx, uint32_t src, uint32_t dest, int type, void *m
 	}
 
 	if ((sz & MESSAGE_TYPE_MASK) != sz) {
-		xu_println("The message to %x is too large", dest);
+		xu_error(ctx, "The message to %x is too large", dest);
 		if (type & MTYPE_TAG_DONTCOPY) {
 			xu_free(msg);
 		}
@@ -691,7 +693,12 @@ int xu_handle_msgput(uint32_t handle, struct xu_msg *msg)
 	return 0;
 }
 
-void xu_kern_init(const char *mod_path)
+uint32_t xu_actor_handle(struct xu_actor *ctx)
+{
+	return ctx->handle;
+}
+
+void xu_kern_global_init(const char *mod_path)
 {
 	xu_modules_init(mod_path);
 	xu_actors_init();

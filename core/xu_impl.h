@@ -17,8 +17,9 @@
 #define SPIN_RELEASE(x) spinlock_destroy(&(x)->lock)
 
 void xu_timer_init(void);
-void xu_kern_init(const char *mod_path);
+void xu_kern_global_init(const char *mod_path);
 int xu_actors_total();
+struct xu_actor *xu_actor_new(const char *name, const char *p);
 
 /* init environment */
 void xu_envinit(void);

@@ -223,7 +223,7 @@ void xu_updatetime(void)
 	uint64_t cp = gettime();
 
 	if (cp < __TM->current_point) {
-		xu_println("time diff error: change from %lld to %lld", cp, __TM->current_point);
+		xu_error(NULL, "time diff error: change from %lld to %lld", cp, __TM->current_point);
 		__TM->current_point  = cp;
 	} else if (cp != __TM->current_point) {
 		diff = (uint32_t)(cp - __TM->current_point);

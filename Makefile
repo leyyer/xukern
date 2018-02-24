@@ -46,6 +46,7 @@ OBJS += core/xu_utils.o \
 		core/xu_kern.o \
 		core/xu_time.o \
 		core/xu_start.o \
+		core/xu_error.o \
 
 OBJS += $(LUA_OBJS)
 
