@@ -1,5 +1,16 @@
 xucore.println ("hello world")
 
+package.cpath = "./btif/?.so;" .. package.cpath
+require("btif")
+
+local bi = Btif.open("/dev/ttyS1")
+print(bi)
+local b = Buffer.alloc(20)
+b:writeInt8(10, 1)
+print(bi:command(0xa, b))
+b = nil
+bi:close()
+
 local create = coroutine.create
 local yield = coroutine.yield
 local resume = coroutine.resume

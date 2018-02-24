@@ -86,6 +86,11 @@ static int __buf_dump(lua_State *L)
 	return 0;
 }
 
+/*
+ * P<1> : Buffer object.
+ * P<2> : offset. [optional]
+ * P<3> : len.    [optional]
+ */
 static int __buf_toString(lua_State *L)
 {
 	return __buf_off_len(L, 0);
@@ -147,6 +152,7 @@ void init_lua_buffer(lua_State *L)
 {
 	static luaL_reg buf[] = {
 		{"alloc", __buf_alloc},
+		{"new", __buf_alloc},
 		{"fromString", __buf_from_string},
 		{NULL, NULL}
 	};

@@ -27,5 +27,6 @@ void * xu_ctx_loop(xuctx_t ctx);
  */
 void init_lua_buffer(lua_State *L);
 void init_lua_net(lua_State *L, xuctx_t);
+void init_lua_timer(lua_State *L, xuctx_t);
 #endif
 

@@ -60,8 +60,8 @@ static int __tm_start(lua_State *L)
 		goto skip;
 	}
 
-	repeat = luaL_checknumber(L, 4);
-	timeout = luaL_checknumber(L, 3);
+	repeat = luaL_checkinteger(L, 4);
+	timeout = luaL_checkinteger(L, 3);
 
 	lua_settop(L, 2);
 	twr->cb = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -108,7 +108,7 @@ static int __tm_set_repeat(lua_State *L)
 	struct timer_wrap *twr = TIMER();
 	uint64_t r;
 
-	r = luaL_checknumber(L, 2);
+	r = luaL_checkinteger(L, 2);
 	uv_timer_set_repeat(&twr->handle, r);
 	return 0;
 }
@@ -119,7 +119,7 @@ static int __tm_get_repeat(lua_State *L)
 	uint64_t r;
 
 	r = uv_timer_get_repeat(&twr->handle);
-	lua_pushnumber(L, r);
+	lua_pushinteger(L, r);
 	return 1;
 }
 

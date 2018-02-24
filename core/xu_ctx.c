@@ -99,6 +99,17 @@ static int __run_once(lua_State *L)
 	return 0;
 }
 
+static int __now(lua_State *L)
+{
+	xuctx_t ctx = lua_touserdata(L, lua_upvalueindex(1));
+	uint64_t n;
+
+	n = uv_now(ctx->loop);
+	lua_pushinteger(L, n);
+
+	return 1;
+}
+
 xuctx_t xu_ctx_new()
 {
 	lua_State *L;
@@ -108,6 +119,7 @@ xuctx_t xu_ctx_new()
 		{"setenv", __setenv},
 		{"getenv", __getenv},
 		{"println", __println},
+		{"now", __now},
 		{"sleep", __sleep},
 		{"usleep", __usleep},
 		{"run",  __run},
@@ -129,6 +141,8 @@ xuctx_t xu_ctx_new()
 	luaL_openlib(L, "xucore", xu, 1);
 	lua_pop(L, 1);
 
+	lua_pushlightuserdata(L, ctx);
+	lua_setfield(L, LUA_REGISTRYINDEX, "xuctx");
 	init_lua_buffer(L);
 	init_lua_net(L, ctx);
 	init_lua_timer(L, ctx);

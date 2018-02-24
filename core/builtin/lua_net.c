@@ -219,7 +219,7 @@ static void __on_recv(xu_udp_t udp, const void *data, int nread, const struct so
 	if (uwr->recv != LUA_REFNIL) {
 		int top = lua_gettop(L);
 		xu_println("%s: top = %d", __func__, top);
-		if (top != 1) {
+		if (top < 1) {
 			lua_pushcfunction(L, xu_luatraceback);
 		} else {
 			assert(top == 1);
@@ -303,23 +303,23 @@ static void __on_send(xu_udp_t udp, int status)
 	lua_State *L;
 
 	uwr = xu_udp_get_data(udp);
-	if (uwr->send != LUA_REFNIL) {
-		L = uwr->L;
-		top = lua_gettop(L);
-		if (top != 1) {
-			lua_pushcfunction(L, xu_luatraceback);
-		} else {
-			assert(top == 1);
-		}
-		lua_rawgeti(L, LUA_REGISTRYINDEX, uwr->recv);
-		lua_pushinteger(L, status); /* <1>: status */
-		r = lua_pcall(L, 1, 0, 1);
-		if (r != 0) {
-			xu_println("%s: %s", __func__, lua_tostring(L, -1));
-			lua_pop(L, 1);
-		}
+	if (uwr->send == LUA_REFNIL)
+		return;
+	L = uwr->L;
+	top = lua_gettop(L);
+	if (top < 1) {
+		lua_pushcfunction(L, xu_luatraceback);
+	} else {
+		assert(top == 1);
 	}
-//	xu_println("send status %d", status);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, uwr->recv);
+	lua_pushinteger(L, status); /* <1>: status */
+	r = lua_pcall(L, 1, 0, 1);
+	if (r != 0) {
+		xu_println("%s: %s", __func__, lua_tostring(L, -1));
+		lua_pop(L, 1);
+	}
+	//	xu_println("send status %d", status);
 }
 
 static int __sock_udp_send(lua_State *L)
@@ -692,27 +692,28 @@ static void __on_tcp_recv(xu_tcp_t udp, const void *data, int nread)
 	lua_State *L;
 
 	uwr = xu_tcp_get_data(udp);
+	if (uwr->recv == LUA_REFNIL)
+		return;
+
 	L = uwr->L;
-	if (uwr->recv != LUA_REFNIL) {
-		int top = lua_gettop(L);
-		if (top != 1) {
-			lua_pushcfunction(L, xu_luatraceback);
-		} else {
-			assert(top == 1);
-		}
-		lua_rawgeti(L, LUA_REGISTRYINDEX, uwr->recv);
-		lua_pushinteger(L, nread); /* <1>: length */
-		if (nread > 0) {           /* <2>: buffer or nil */
-			buf = buffer_new(L, nread);
-			memcpy(buf->data, data, nread);
-		} else {
-			lua_pushnil(L);
-		}
-		r = lua_pcall(L, 2, 0, 1);
-		if (r != 0) {
-			xu_println("%s: %s", __func__, lua_tostring(L, -1));
-			lua_pop(L, 1);
-		}
+	int top = lua_gettop(L);
+	if (top < 1) {
+		lua_pushcfunction(L, xu_luatraceback);
+	} else {
+		assert(top == 1);
+	}
+	lua_rawgeti(L, LUA_REGISTRYINDEX, uwr->recv);
+	lua_pushinteger(L, nread); /* <1>: length */
+	if (nread > 0) {           /* <2>: buffer or nil */
+		buf = buffer_new(L, nread);
+		memcpy(buf->data, data, nread);
+	} else {
+		lua_pushnil(L);
+	}
+	r = lua_pcall(L, 2, 0, 1);
+	if (r != 0) {
+		xu_println("%s: %s", __func__, lua_tostring(L, -1));
+		lua_pop(L, 1);
 	}
 }
 
@@ -774,23 +775,24 @@ static void __on_tcp_send(xu_tcp_t udp, int status)
 	lua_State *L;
 
 	uwr = xu_tcp_get_data(udp);
-	if (uwr->send != LUA_REFNIL) {
-		L = uwr->L;
-		top = lua_gettop(L);
-		if (top != 1) {
-			lua_pushcfunction(L, xu_luatraceback);
-		} else {
-			assert(top == 1);
-		}
-		lua_rawgeti(L, LUA_REGISTRYINDEX, uwr->send);
-		lua_pushinteger(L, status); /* <1>: status */
-		r = lua_pcall(L, 1, 0, 1);
-		if (r != 0) {
-			xu_println("%s: %s", __func__, lua_tostring(L, -1));
-			lua_pop(L, 1);
-		}
+	if (uwr->send == LUA_REFNIL) {
+		return;
 	}
-//	xu_println("send status %d", status);
+	L = uwr->L;
+	top = lua_gettop(L);
+	if (top < 1) {
+		lua_pushcfunction(L, xu_luatraceback);
+	} else {
+		assert(top == 1);
+	}
+	lua_rawgeti(L, LUA_REGISTRYINDEX, uwr->send);
+	lua_pushinteger(L, status); /* <1>: status */
+	r = lua_pcall(L, 1, 0, 1);
+	if (r != 0) {
+		xu_println("%s: %s", __func__, lua_tostring(L, -1));
+		lua_pop(L, 1);
+	}
+	//	xu_println("send status %d", status);
 }
 
 static int __sock_tcp_send(lua_State *L)
@@ -843,7 +845,7 @@ static void __on_accept(xu_tcp_t server, xu_tcp_t tcp, int status)
 	if (twr->accept != LUA_REFNIL) {
 		L = twr->L;
 		top = lua_gettop(L);
-		if (top != 1) {
+		if (top < 1) {
 			lua_pushcfunction(L, xu_luatraceback);
 		} else {
 			assert(top == 1);
@@ -888,7 +890,7 @@ static void __on_connect(xu_tcp_t tcp, int status)
 	if (twr->connect != LUA_REFNIL) {
 		lua_State *L = twr->L;
 		int top = lua_gettop(L);
-		if (top != 1) {
+		if (top < 1) {
 			lua_pushcfunction(L, xu_luatraceback);
 		} else {
 			assert(top == 1);
