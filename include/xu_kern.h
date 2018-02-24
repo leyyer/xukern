@@ -37,6 +37,7 @@ void xu_actor_callback(struct xu_actor *ctx, void *ud, xu_callback_t cb);
 struct xu_actor *xu_handle_ref(uint32_t handle);
 struct xu_actor *xu_actor_unref(struct xu_actor *ctx);
 
+struct xu_actor *xu_actor_new(const char *name, const char *p);
 int xu_handle_msgput(uint32_t handle, struct xu_msg *msg);
 int xu_send(struct xu_actor *ctx, uint32_t src, uint32_t dest, int type, void *msg, size_t sz);
 int xu_sendname(struct xu_actor * context, uint32_t source, const char *addr , int type, void * data, size_t sz);

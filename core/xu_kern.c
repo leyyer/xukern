@@ -506,6 +506,9 @@ static void dispatch_message(struct xu_actor *ctx, struct xu_msg *msg)
 	int type = msg->sz >> MESSAGE_TYPE_SHIFT;
 	size_t sz = msg->sz & MESSAGE_TYPE_MASK;
 
+	if (ctx->logfile)
+		xu_log_output(ctx->logfile, msg->source, type, msg->data, sz);
+
 	rmsg = ctx->cb(ctx, ctx->data, type, msg->source, (void *)msg->data, sz);
 	if (!rmsg && (sz > 0)) {
 		xu_free((void *)msg->data);
