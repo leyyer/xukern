@@ -43,6 +43,8 @@ OBJS += core/xu_utils.o \
 		core/xu_ctx.o \
 		core/xu_udp.o \
 		core/xu_tcp.o \
+		core/xu_kern.o \
+		core/xu_time.o \
 
 OBJS += $(LUA_OBJS)
 
