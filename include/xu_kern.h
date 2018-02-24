@@ -4,6 +4,7 @@
 extern "C"
 #endif
 
+#include <stddef.h>
 #include <stdint.h>
 
 #define MESSAGE_TYPE_MASK (SIZE_MAX >> 8)
@@ -25,8 +26,9 @@ struct xu_msg {
 struct queue;
 struct xu_actor;
 
+void xu_kern_start(const char *modpath, int threads);
+
 typedef int (*xu_callback_t)(struct xu_actor *, void *ud, int type, uint32_t src, void *msg, size_t sz);
-void xu_kern_init(const char *mod_path);
 
 void xu_actor_callback(struct xu_actor *ctx, void *ud, xu_callback_t cb);
 
@@ -44,7 +46,6 @@ const char *xu_actor_namehandle(uint32_t h, const char *name);
 /*
  * time api.
  */
-void xu_timer_init(void);
 uint64_t xu_now(void);
 uint64_t xu_starttime(void);
 void xu_updatetime(void);

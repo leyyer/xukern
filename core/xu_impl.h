@@ -16,6 +16,10 @@
 #define SPIN_UNLOCK(x)  spinlock_unlock(&(x)->lock)
 #define SPIN_RELEASE(x) spinlock_destroy(&(x)->lock)
 
+void xu_timer_init(void);
+void xu_kern_init(const char *mod_path);
+int xu_actors_total();
+
 /* init environment */
 void xu_envinit(void);
 /* deinit environment */

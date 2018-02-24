@@ -5,7 +5,6 @@
 #include <assert.h>
 #include <dlfcn.h>
 #include "xu_impl.h"
-#include "uv.h"
 #include "xu_kern.h"
 
 struct xu_actor;
@@ -178,6 +177,23 @@ struct xu_module *xu_module_query(const char *name)
 	}
 	SPIN_UNLOCK(_mmgr);
 	return xo;
+}
+
+static int _total_actors = 0;
+
+static void inline __actors_inc()
+{
+	ATOM_INC(&_total_actors);
+}
+
+static void inline __actors_dec()
+{
+	ATOM_DEC(&_total_actors);
+}
+
+int xu_actors_total()
+{
+	return _total_actors;
 }
 
 /* queue */
@@ -418,6 +434,7 @@ struct xu_actor *xu_actor_unref(struct xu_actor *ctx)
 		ctx->module->free(ctx->instance);
 		xu_queue_mark_drop(ctx->q);
 		xu_free(ctx);
+		__actors_dec();
 		return NULL;
 	}
 	return ctx;
@@ -447,6 +464,8 @@ struct xu_actor *xu_actor_new(const char *name, const char *p)
 	xa->ref = 2;
 	xa->handle = xu_actor_register(xa);
 	struct queue *q = xa->q = xu_queue_new(xa->handle);
+
+	__actors_inc();
 
 	int r = m->init(xa, ud, p);
 	if (r == 0) {

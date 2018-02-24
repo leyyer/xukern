@@ -45,6 +45,7 @@ OBJS += core/xu_utils.o \
 		core/xu_tcp.o \
 		core/xu_kern.o \
 		core/xu_time.o \
+		core/xu_start.o \
 
 OBJS += $(LUA_OBJS)
 
@@ -98,6 +99,9 @@ luaclib/cjson.so: luaclib/cjson.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared $^ -o $@ 
 
 demo: tests/xc.o libxucore.so
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -Wl,-rpath,. -static-libgcc
+
+kern: tests/kern.o libxucore.so
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -Wl,-rpath,. -static-libgcc
 
 actor:

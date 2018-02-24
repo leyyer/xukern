@@ -4,6 +4,7 @@
 *.so
 3rd/usr
 usr
+kern
 xademo
 demo
 tags
