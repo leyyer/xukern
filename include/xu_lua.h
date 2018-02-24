@@ -15,6 +15,8 @@ lua_State *xu_newstate(void);
 int xu_luaclass(lua_State *L, const char *class_name, struct luaL_Reg *methods,
 		const char *mt_name, struct luaL_Reg *mt_methods);
 
+void xu_create_metatable(lua_State *L, const char *name, luaL_Reg reg[]);
+
 /* traceback function */
 int xu_luatraceback(lua_State *L);
 

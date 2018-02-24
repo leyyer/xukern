@@ -131,6 +131,7 @@ xuctx_t xu_ctx_new()
 
 	init_lua_buffer(L);
 	init_lua_net(L, ctx);
+	init_lua_timer(L, ctx);
 
 	//xu_println("top = %d", lua_gettop(L));
 	return ctx;

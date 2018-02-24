@@ -1,7 +1,9 @@
 #include "xu_core.h"
+#include "xu_util.h"
 
 int main(int argc, char *argv[])
 {
+	int r;
 	xuctx_t ctx;
 
 	xu_core_init(argc, argv);
@@ -12,7 +14,8 @@ int main(int argc, char *argv[])
 	ctx = xu_ctx_new();
 
 	xu_ctx_load(ctx, argv[1]);
-	xu_ctx_run(ctx);
+	r = xu_ctx_run(ctx);
+	xu_println("loop end: %d", r);
 	xu_core_exit();
 	return 0;
 }

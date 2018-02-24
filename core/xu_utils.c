@@ -96,3 +96,13 @@ lua_State *xu_newstate()
 	return lua_newstate(__alloc, NULL);
 }
 
+void xu_create_metatable(lua_State *L, const char *name, luaL_Reg reg[])
+{
+	luaL_newmetatable(L, name);
+	lua_pushstring(L, "__index");
+	lua_pushvalue(L, -2);
+	lua_settable(L, -3);
+	luaL_openlib(L, NULL, reg, 0);
+	lua_pop(L, 1);
+}
+

@@ -72,16 +72,6 @@ static int __sock_port(lua_State *L)
 	return 1;
 }
 
-static void __create_metatable(lua_State *L, const char *name, luaL_Reg reg[])
-{
-	luaL_newmetatable(L, name);
-	lua_pushstring(L, "__index");
-	lua_pushvalue(L, -2);
-	lua_settable(L, -3);
-	luaL_openlib(L, NULL, reg, 0);
-	lua_pop(L, 1);
-}
-
 static void __sock_addr_mt(lua_State *L)
 {
 	static luaL_Reg sa[] = {
@@ -94,7 +84,7 @@ static void __sock_addr_mt(lua_State *L)
 		{NULL, NULL}
 	};
 
-	__create_metatable(L, SOCK_MTADDR, sa);
+	xu_create_metatable(L, SOCK_MTADDR, sa);
 }
 
 struct udp_wrap {
@@ -192,6 +182,17 @@ static int __sock_udp_close(lua_State *L)
 	uwr->recv  = LUA_REFNIL;
 	uwr->send = LUA_REFNIL;
 	xu_udp_close(udp);
+	uwr->udp = NULL;
+	return 0;
+}
+
+static int __sock_udp_gc(lua_State *L)
+{
+	struct udp_wrap *uwr = UDP();
+
+	if (uwr->udp)
+		__sock_udp_close(L);
+
 	return 0;
 }
 
@@ -318,7 +319,7 @@ static void __on_send(xu_udp_t udp, int status)
 			lua_pop(L, 1);
 		}
 	}
-	xu_println("send status %d", status);
+//	xu_println("send status %d", status);
 }
 
 static int __sock_udp_send(lua_State *L)
@@ -574,10 +575,10 @@ static void __sock_dgram(lua_State *L, xuctx_t ctx)
 		{"setTTL",  __sock_udp_ttl},
 		{"setBroadcast", __sock_udp_set_broadcast},
 		{"onSend",  __sock_udp_on_send},
-		{"__gc",    __sock_udp_close},
+		{"__gc",    __sock_udp_gc},
 		{NULL, NULL}
 	};
-	__create_metatable(L, SOCK_MTDGRAM, mt_sd);
+	xu_create_metatable(L, SOCK_MTDGRAM, mt_sd);
 	lua_pushlightuserdata(L, ctx);
 	luaL_openlib(L, "Udp", sd, 1);
 	lua_pop(L, 1);
@@ -659,6 +660,7 @@ static int __sock_tcp_close(lua_State *L)
 	struct tcp_wrap *uwr = TCP();
 	xu_tcp_t tcp = uwr->tcp;
 
+	xu_println(" %s called %p - %p ", __func__, uwr, tcp);
 	luaL_unref(L, LUA_REGISTRYINDEX, uwr->recv);
 	luaL_unref(L, LUA_REGISTRYINDEX, uwr->send);
 	luaL_unref(L, LUA_REGISTRYINDEX, uwr->connect);
@@ -668,6 +670,17 @@ static int __sock_tcp_close(lua_State *L)
 	uwr->connect = LUA_REFNIL;
 	uwr->accept = LUA_REFNIL;
 	xu_tcp_close(tcp);
+	uwr->tcp = NULL;
+	return 0;
+}
+
+static int __sock_tcp_gc(lua_State *L)
+{
+	struct tcp_wrap *twr = TCP();
+	xu_println("tcp gc: %p", twr->tcp);
+	if (twr->tcp)
+		__sock_tcp_close(L);
+	xu_println("tcp gc: %p end", twr->tcp);
 	return 0;
 }
 
@@ -688,7 +701,6 @@ static void __on_tcp_recv(xu_tcp_t udp, const void *data, int nread)
 			assert(top == 1);
 		}
 		lua_rawgeti(L, LUA_REGISTRYINDEX, uwr->recv);
-		printf("nread = %d\n", nread);
 		lua_pushinteger(L, nread); /* <1>: length */
 		if (nread > 0) {           /* <2>: buffer or nil */
 			buf = buffer_new(L, nread);
@@ -770,7 +782,7 @@ static void __on_tcp_send(xu_tcp_t udp, int status)
 		} else {
 			assert(top == 1);
 		}
-		lua_rawgeti(L, LUA_REGISTRYINDEX, uwr->recv);
+		lua_rawgeti(L, LUA_REGISTRYINDEX, uwr->send);
 		lua_pushinteger(L, status); /* <1>: status */
 		r = lua_pcall(L, 1, 0, 1);
 		if (r != 0) {
@@ -796,7 +808,6 @@ static int __sock_tcp_send(lua_State *L)
 			s = luaL_checklstring(L, 2, &sz);
 			xb.base = (void *)s;
 			xb.len = sz;
-			printf("sz = %u\n", sz);
 			break;
 		case LUA_TUSERDATA:
 			buf = BUFFER(2);       /* <2> data */
@@ -961,11 +972,11 @@ static void __sock_stream(lua_State *L, xuctx_t ctx)
 		{"connect",   __sock_tcp_connect},
 		{"send",      __sock_tcp_send},
 		{"onSend",    __sock_tcp_on_send},
-		{"__gc",      __sock_tcp_close},
+		{"__gc",      __sock_tcp_gc},
 		{NULL, NULL}
 	};
 
-	__create_metatable(L, SOCK_MTSTREAM, mt_sd);
+	xu_create_metatable(L, SOCK_MTSTREAM, mt_sd);
 	lua_pushlightuserdata(L, ctx);
 	luaL_openlib(L, "Tcp", sd, 1);
 	lua_pop(L, 1);

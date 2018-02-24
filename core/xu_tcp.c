@@ -54,8 +54,7 @@ static void __free(uv_handle_t *h)
 
 void xu_tcp_close(xu_tcp_t tcp)
 {
-	if (uv_is_active((uv_handle_t *)&tcp->handle) || !uv_is_closing((uv_handle_t *)&tcp->handle))
-		uv_close((uv_handle_t *)&tcp->handle, __free);
+	uv_close((uv_handle_t *)&tcp->handle, __free);
 }
 
 void xu_tcp_set_data(xu_tcp_t tcp, void *data)

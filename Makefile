@@ -29,6 +29,7 @@ LDFLAGS += -L$(TOP) -L$(RD3ROOT)/lib -Wl,--start-group $(LINKLIBS) -Wl,--end-gro
 
 LUA_OBJS := core/builtin/lua_buffer.o \
 			core/builtin/lua_net.o \
+			core/builtin/lua_timer.o \
 
 OBJS += core/xu_utils.o \
 		core/xu_malloc.o \
