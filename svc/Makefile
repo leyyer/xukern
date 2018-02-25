@@ -1,4 +1,4 @@
-MODS := logger.so 
+MODS := logger.so  echo.so
 
 LDFLAGS += -L../ -lxucore
 
@@ -10,4 +10,6 @@ xalua.so : xulua.c lua_tcp.c
 logger.so : logger.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared $^ -o $@ 
 console.so : console.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared $^ -o $@ 
+echo.so : echo.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared $^ -o $@ 

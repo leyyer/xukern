@@ -24,7 +24,7 @@ struct logger *logger_new(void)
 static int __dispatch(struct xu_actor *ctx, void *ud, int type, uint32_t src, void *msg, size_t sz)
 {
 	struct logger *log = ud;
-	static int n = 1;
+//	static int n = 1;
 
 	switch (type) {
 		case  MTYPE_LOG:
@@ -33,10 +33,12 @@ static int __dispatch(struct xu_actor *ctx, void *ud, int type, uint32_t src, vo
 			fprintf(log->sfp, "\n");
 			fflush(log->sfp);
 			break;
+#if 0
 		case MTYPE_TIMEOUT:
 			xu_error(ctx, "timeout %p", msg);
 			xu_timeout(xu_actor_handle(ctx), 10, ++n);
 			break;
+#endif
 	}
 
 	return 0;
@@ -58,7 +60,7 @@ int logger_init(struct xu_actor *ctx, struct logger *log, const char *param)
 	if (log->sfp) {
 		xu_actor_namehandle(xu_actor_handle(ctx), "logger");
 		xu_actor_callback(ctx, log, __dispatch);
-		xu_timeout(xu_actor_handle(ctx), 200, 1);
+//		xu_timeout(xu_actor_handle(ctx), 200, 1);
 		return 0;
 	} 
 	return -1;

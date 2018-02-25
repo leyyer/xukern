@@ -15,6 +15,7 @@ extern "C"
 
 #define MTYPE_TIMEOUT 1
 #define MTYPE_LOG     2
+#define MTYPE_IO      3
 
 #define XU_NAME_LEN (64)
 

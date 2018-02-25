@@ -47,6 +47,7 @@ OBJS += core/xu_utils.o \
 		core/xu_time.o \
 		core/xu_start.o \
 		core/xu_error.o \
+		core/xu_io.o \
 
 OBJS += $(LUA_OBJS)
 
@@ -105,7 +106,7 @@ demo: tests/xc.o libxucore.so
 kern: tests/kern.o libxucore.so
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -Wl,-rpath,. -static-libgcc
 
-actor:
+extra:
 	$(MAKE) CC=$(CC) CFLAGS="$(CFLAGS)" -C $(TOP)/svc
 
 clean:

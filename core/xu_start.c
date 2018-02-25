@@ -49,6 +49,21 @@ static void thread_worker(void *p)
 	}
 }
 
+static void io_thread(void *p)
+{
+	int r;
+	struct worker *w = p;
+	for (;;) {
+		r = xu_io_step();
+		if (r == 0)
+			break;
+		if (xu_actors_total() == 0)
+			break;
+		wakeup(w, 0);
+	}
+	fprintf(stderr, "io_thread quit\n");
+}
+
 static void timer_loop(struct worker *w)
 {
 	while (1) {
@@ -67,7 +82,7 @@ static void timer_loop(struct worker *w)
 static void start(int thread)
 {
 	int i;
-	uv_thread_t pid[thread];
+	uv_thread_t pid[thread + 1];
 	struct worker *w = xu_malloc(sizeof *w);
 
 	w->count = thread;
@@ -76,13 +91,15 @@ static void start(int thread)
 	uv_mutex_init(&w->lock);
 	uv_cond_init(&w->cond);
 
+	uv_thread_create(&pid[0], io_thread, w);
+
 	for (i = 0; i < thread; ++i) {
 		uv_thread_create(&pid[i+1], thread_worker, w);
 	}
 	
 	timer_loop(w);
 
-	for (i = 0; i < thread; ++i) {
+	for (i = 0; i < thread + 1; ++i) {
 		uv_thread_join(&pid[i]);
 	}
 
@@ -128,20 +145,22 @@ void xu_kern_init(int argc, char *argv[])
 	parsing(argc, argv);
 
 	xu_timer_init();
+	xu_io_init();
+
 	mod_path = xu_getenv("mod_path", NULL, 0);
 	xu_kern_global_init(mod_path ?: "./svc" );
-};
 
-void xu_kern_start()
-{
 	struct xu_actor *ctx;
-	int threads = 3;
-
 	ctx = xu_actor_new("logger", "");
 	if (ctx == NULL) {
 		xu_println("can't find logger");
 		exit(-1);
 	}
+};
+
+void xu_kern_start()
+{
+	int threads = 3;
 	start(threads);
 }
 

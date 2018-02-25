@@ -191,13 +191,12 @@ int xu_udp_set_broadcast(xu_udp_t udp, int on)
 static void __on_recv(uv_udp_t *handle, ssize_t nread, const uv_buf_t *buf,
 		const struct sockaddr *addr, unsigned int flags)
 {
-	xu_udp_t udp;
+	xu_udp_t udp = (xu_udp_t)handle;
 
 	if (nread == 0 && addr == NULL) {
 		goto skip;
 	}
 
-	udp = handle->data;
 	if (udp->recv)
 		udp->recv(udp, buf->base, nread, addr);
 skip:
