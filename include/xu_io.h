@@ -23,14 +23,13 @@
 #define XIE_EVENT_SHIFT (24)
 
 union sockaddr_all {
-	struct sockaddr_storage ss;
-	struct sockaddr     addr;
-	struct sockaddr_in  addr4;
-	struct sockaddr_in6 addr6;
+	struct sockaddr     in;
+	struct sockaddr_in  in4;
+	struct sockaddr_in6 in6;
 };
 
 struct xu_io_event {
-	int      fdesc;
+	uint32_t fdesc;
 	size_t   size; /* 1 byte (event) + 3 bytes (length) */
 	union {
 		int  errcode;
@@ -43,10 +42,10 @@ int xu_io_tcp_server(uint32_t handle, const char *addr, int port);
 int xu_io_tcp_connect(uint32_t handle, const char *addr, int port);
 
 int xu_io_fd_open(uint32_t handle, int fd);
-int xu_io_write(uint32_t handle, int fdesc, const void *data, int len);
+int xu_io_write(uint32_t handle, uint32_t fdesc, const void *data, int len);
 
 int xu_io_udp_server(uint32_t handle, const char *addr, int port);
 int xu_io_udp_client(uint32_t handle, const char *p, int port);
-int xu_io_udp_send(uint32_t handle, int fdesc, union sockaddr_all *, const void *data, int len);
+int xu_io_udp_send(uint32_t handle, uint32_t fdesc, union sockaddr_all *, const void *data, int len);
 #endif
 

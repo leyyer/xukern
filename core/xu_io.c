@@ -10,6 +10,7 @@
 #include "xu_kern.h"
 #include "xu_util.h"
 #include "xu_io.h"
+#include "list.h"
 
 #define XU_IO_TCP  1
 #define XU_IO_UDP  2
@@ -18,23 +19,24 @@
 #define IO_REQ_WRITE   2
 #define IO_REQ_UDPSEND 3
 
-struct server_req {
+struct req_server {
 	uint16_t  protocol;
 	uint16_t  port;
 	uint32_t  owner;
+	uint32_t  fdesc;
 	char      host[0];
 };
 
-struct write_req {
+struct req_write {
 	uint32_t owner;
-	int      fdesc;
+	uint32_t fdesc;
 	size_t   len;
 	const void    *data;
 };
 
-struct udp_write_req {
+struct req_usend {
 	uint32_t owner;
-	int      fdesc;
+	uint32_t fdesc;
 	union sockaddr_all addr;
 	size_t     len;
 	const void *data;
@@ -49,9 +51,9 @@ struct request {
 	struct header head;
 	union {
 		char buffer[256];
-		struct server_req server;
-		struct write_req write;
-		struct udp_write_req udp;
+		struct req_server server;
+		struct req_write write;
+		struct req_usend udp;
 	} u;
 };
 
@@ -68,8 +70,13 @@ struct iohandle {
 		uv_udp_t    udp;
 		uv_stream_t stream;
 		uv_poll_t   fd;
+		uv_tty_t    tty;
 	} u;
+
+	struct list_head link;
+
 	uint32_t owner;
+	uint32_t handle;
 	int      protocol;
 	int      flag;
 };
@@ -79,8 +86,9 @@ struct io_context {
 
 	int sendfd;
 
-	int cap;
-	struct iohandle *handles;
+	struct list_head io;
+
+	uint32_t handle_index;
 	struct spinlock lock;
 };
 
@@ -90,12 +98,12 @@ static void __on_close(uv_handle_t *h)
 {
 	struct iohandle *ih = (struct iohandle *)h;
 
-	ih->flag = IO_HF_IDLE;
-	ih->protocol = -1;
-	ih->owner = 0;
+	xu_error(NULL, "freeing handle[%u] %p", ih->handle, ih);
+	list_del(&ih->link);
+	xu_free(ih);
 }
 
-static void __report_eorc(uint32_t owner, int eorc, int fd, int errcode)
+static void __report_eorc(uint32_t owner, int eorc, uint32_t fd, int errcode)
 {
 	struct xu_actor *ctx;
 	struct xu_io_event xie;
@@ -112,7 +120,7 @@ static void __report_eorc(uint32_t owner, int eorc, int fd, int errcode)
 	}
 }
 
-static void __report_lora(uint32_t owner, int e, int fd, struct sockaddr *sa)
+static void __report_lora(uint32_t owner, int e, uint32_t fd, struct sockaddr *sa)
 {
 	struct xu_io_event xie;
 	struct xu_actor *xa;
@@ -120,7 +128,7 @@ static void __report_lora(uint32_t owner, int e, int fd, struct sockaddr *sa)
 	memset(&xie, 0, sizeof xie);
 	xie.fdesc = fd;
 	xie.size = e << XIE_EVENT_SHIFT;
-	xie.u.sa.addr = *sa;
+	xie.u.sa.in = *sa;
 	xa = xu_handle_ref(owner);
 	if (xa) {
 		xu_send(xa, 0, owner, MTYPE_IO, &xie, sizeof xie);
@@ -132,44 +140,33 @@ static struct iohandle *__get_h(struct io_context *ic)
 {
 	struct iohandle *ioh = NULL;
 
-	for (int i = 0; i < ic->cap; ++i) {
-		if (ic->handles[i].flag == IO_HF_IDLE) {
-			ioh = &ic->handles[i];
-			break;
-		}
-	}
+	ioh = xu_calloc(1, sizeof *ioh);
 
-	if (ioh == NULL) { /* no valid, expanding */
-		xu_error(NULL, "expand iohandle cache.");
-		ic->handles = xu_realloc(ic->handles, (ic->cap + 32) * sizeof ic->handles[0]);
-		ioh = &ic->handles[ic->cap];
-		ic->cap += 32;
-	}
+	INIT_LIST_HEAD(&ioh->link);
+	ioh->flag = IO_HF_IDLE;
+
+	list_add(&ioh->link, &ic->io);
+
 	return ioh;
 }
 
-static struct iohandle *__find_h(struct io_context *ic, uint32_t owner, int fdesc)
+static struct iohandle *__find_h(struct io_context *ic, uint32_t owner, uint32_t fdesc)
 {
 	struct iohandle *h = NULL, *it;
-	int fd;
 
-	for (int i = 0; i < ic->cap; ++i) {
-		it = &ic->handles[i];
-		if (it->flag != IO_HF_IDLE && it->owner == owner) {
-			uv_fileno(&it->u.handle, &fd);
-			if (fd == fdesc) {
-				h = it;
-				break;
-			}
+	list_for_each_entry(it, &ic->io, link) {
+		if (it->flag != IO_HF_IDLE && it->owner == owner && it->handle == fdesc) {
+			h = it;
+			break;
 		}
 	}
-
 	return (h);
 }
 
 struct dnsreq {
 	uv_getaddrinfo_t req;
 	uint32_t owner;
+	uint32_t handle;
 	int      proto;
 };
 
@@ -190,11 +187,11 @@ static void __on_tcp_read(uv_stream_t *stream, int nread, const uv_buf_t *buf)
 	if (nread == UV_EOF) {
 		int fd;
 		uv_fileno(&tcp->u.handle, &fd);
-		xu_error(NULL, "fdesc %d eof.", fd);
+		xu_error(NULL, "fdesc %d eof handle %u.", fd, tcp->handle);
 		/*
 		 * report close event.
 		 */
-		__report_eorc(tcp->owner, XIE_EVENT_CLOSE, fd, XIE_ERR_EOF);
+		__report_eorc(tcp->owner, XIE_EVENT_CLOSE, tcp->handle, XIE_ERR_EOF);
 		uv_read_stop(stream);
 		if (tcp->flag != IO_HF_CLOSING) {
 			uv_close(&tcp->u.handle, __on_close);
@@ -208,7 +205,7 @@ static void __on_tcp_read(uv_stream_t *stream, int nread, const uv_buf_t *buf)
 
 		xie = xu_malloc(sizeof *xie + nread);
 
-		uv_fileno(&tcp->u.handle, &xie->fdesc);
+		xie->fdesc = tcp->handle;
 
 		xie->size = (XIE_EVENT_DATA << XIE_EVENT_SHIFT) | (nread & XIE_EVENT_MASK);
 		memcpy(xie->data, buf->base, nread);
@@ -241,15 +238,17 @@ static void __on_accept(uv_stream_t *stream, int err)
 
 		if (uv_accept(stream, &ioh->u.stream) == 0) {
 			union sockaddr_all sal;
-			int fd, namelen;
+			int namelen;
 			ioh->flag = IO_HF_CONNECTED;
 			ioh->protocol = server->protocol;
 			ioh->owner = server->owner;
 			/* new connection */
-			uv_fileno(&ioh->u.handle, &fd);
+			SPIN_LOCK(_ioc);
+			ioh->handle = _ioc->handle_index++;
+			SPIN_UNLOCK(_ioc);
 			namelen = sizeof sal;
 			uv_tcp_getpeername(&ioh->u.tcp, (void *)&sal, &namelen);
-			__report_lora(server->owner, XIE_EVENT_CONNECTION, fd, &sal.addr);
+			__report_lora(server->owner, XIE_EVENT_CONNECTION, ioh->handle, &sal.in);
 			uv_read_start(&ioh->u.stream, __on_alloc, __on_tcp_read);
 		} else {
 			xu_error(NULL, "handle :%0x accept failed.", server->owner);
@@ -286,10 +285,10 @@ static void __on_udp_recv(uv_udp_t *handle, ssize_t nread, const uv_buf_t *buf,
 
 		xie = xu_malloc(sizeof *xie + nread);
 
-		uv_fileno(&udp->u.handle, &xie->fdesc);
+		xie->fdesc = udp->handle;
 
 		xie->size = (XIE_EVENT_MESSAGE << XIE_EVENT_SHIFT) | (nread & XIE_EVENT_MASK);
-		xie->u.sa.addr = *addr;
+		xie->u.sa.in = *addr;
 		memcpy(xie->data, buf->base, nread);
 
 		struct xu_actor *ctx = xu_handle_ref(udp->owner);
@@ -355,12 +354,11 @@ static void __on_dns(uv_getaddrinfo_t *rq, int err, struct addrinfo *ai)
 	 * XXX: report 'listen' or `error' event to `owern'
 	 */
 	if (err == 0) {
-		int fd;
 		ioh->flag = IO_HF_LISTEN;
 		ioh->protocol = dr->proto;
-		ioh->owner = dr->owner;
-		uv_fileno(&ioh->u.handle, &fd);
-		__report_lora(dr->owner, XIE_EVENT_LISTEN, fd, ai->ai_addr);
+		ioh->owner    = dr->owner;
+		ioh->handle   = dr->handle;
+		__report_lora(dr->owner, XIE_EVENT_LISTEN, ioh->handle, ai->ai_addr);
 	} else { /* report error */
 		printf("err = %d\n", err);
 		__report_eorc(dr->owner,  XIE_EVENT_ERROR, -1, XIE_ERR_LISTEN);
@@ -378,7 +376,7 @@ static void __handle_req_server(struct io_context *ic, struct request *req)
 	struct addrinfo hints;
 	const char *node;
 	char service[32];
-	struct server_req *sr = &req->u.server;
+	struct req_server *sr = &req->u.server;
 	int hlen;
 	struct dnsreq *dr;
 	uv_loop_t *loop = uv_default_loop();
@@ -408,6 +406,7 @@ static void __handle_req_server(struct io_context *ic, struct request *req)
 	dr = xu_calloc(1, sizeof *dr);
 	dr->proto = sr->protocol;
 	dr->owner = sr->owner;
+	dr->handle = sr->fdesc;
 
 	if (uv_getaddrinfo(loop, &dr->req, __on_dns, node, service, &hints)) {
 		__report_eorc(sr->owner, XIE_EVENT_ERROR, -1, XIE_ERR_NOTSUPP);
@@ -424,7 +423,7 @@ static void __on_write(uv_write_t *req, int err)
 
 static void __handle_req_write(struct io_context *ic, struct request *req)
 {
-	struct write_req *wr = &req->u.write;
+	struct req_write *wr = &req->u.write;
 	struct iohandle *h = __find_h(ic, wr->owner, wr->fdesc);
 	uv_write_t *uwr;
 
@@ -451,7 +450,7 @@ static void __on_send(uv_udp_send_t *uwr, int status)
 
 static void __handle_req_udp(struct io_context *ic, struct request *req)
 {
-	struct udp_write_req *wr = &req->u.udp;
+	struct req_usend *wr = &req->u.udp;
 	struct iohandle *h = __find_h(ic, wr->owner, wr->fdesc);
 	uv_udp_send_t *uwr;
 
@@ -461,7 +460,7 @@ static void __handle_req_udp(struct io_context *ic, struct request *req)
 		uwr->data = h;
 		buf.base = (void *)wr->data;
 		buf.len = wr->len;
-		if (uv_udp_send(uwr, &h->u.udp, &buf, 1, &wr->addr.addr, __on_send)) {
+		if (uv_udp_send(uwr, &h->u.udp, &buf, 1, &wr->addr.in, __on_send)) {
 			/*
 			 * XXX: report error.
 			 */
@@ -550,9 +549,6 @@ void xu_io_init(void)
 
 	_ioc = xu_calloc(1, sizeof *_ioc);
 
-	_ioc->cap = 32;
-	_ioc->handles = xu_calloc(_ioc->cap, sizeof _ioc->handles[0]);
-
 	SPIN_INIT(_ioc);
 
 	if (pipe(pfd) < 0) {
@@ -561,6 +557,11 @@ void xu_io_init(void)
 		abort();
 	}
 	_ioc->sendfd = pfd[1];
+
+	_ioc->handle_index = 1;
+
+	INIT_LIST_HEAD(&_ioc->io);
+
 	uv_poll_init(loop, &_ioc->recvfd, pfd[0]);
 	uv_poll_start(&_ioc->recvfd, UV_READABLE, __on_req);
 }
@@ -568,7 +569,7 @@ void xu_io_init(void)
 static int __io_server(uint32_t h, const char *addr, int port, int proto)
 {
 	struct request req;
-	struct server_req *sr;
+	struct req_server *sr;
 	uint16_t reqlen = sizeof *sr;
 
 	memset(&req, 0, sizeof req);
@@ -586,7 +587,11 @@ static int __io_server(uint32_t h, const char *addr, int port, int proto)
 	sr->protocol = proto;
 	sr->port  = port;
 	sr->owner = h;
-	return __send_req(IO_REQ_SERVER, &req, reqlen) != reqlen;
+	SPIN_LOCK(_ioc);
+	sr->fdesc = _ioc->handle_index++;
+	SPIN_UNLOCK(_ioc);
+	__send_req(IO_REQ_SERVER, &req, reqlen);
+	return sr->fdesc;
 }
 
 int xu_io_tcp_server(uint32_t h, const char *addr, int port)
@@ -599,10 +604,10 @@ int xu_io_udp_server(uint32_t h, const char *addr, int port)
 	return __io_server(h, addr, port,  XU_IO_UDP);
 }
 
-int xu_io_write(uint32_t handle, int fdesc, const void *data, int len)
+int xu_io_write(uint32_t handle, uint32_t fdesc, const void *data, int len)
 {
 	struct request req;
-	struct write_req *wr;
+	struct req_write *wr;
 
 	wr = &req.u.write;
 	wr->owner = handle;
@@ -612,10 +617,10 @@ int xu_io_write(uint32_t handle, int fdesc, const void *data, int len)
 	return __send_req(IO_REQ_WRITE, &req, sizeof *wr) != sizeof *wr;
 }
 
-int xu_io_udp_send(uint32_t handle, int fdesc, union sockaddr_all *addr, const void *data, int len)
+int xu_io_udp_send(uint32_t handle, uint32_t fdesc, union sockaddr_all *addr, const void *data, int len)
 {
 	struct request req;
-	struct udp_write_req *ur;
+	struct req_usend *ur;
 
 	ur = &req.u.udp;
 	ur->owner = handle;
