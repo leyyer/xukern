@@ -79,8 +79,6 @@ struct io_context {
 
 	int sendfd;
 
-	uv_loop_t loop;
-
 	int cap;
 	struct iohandle *handles;
 	struct spinlock lock;
@@ -191,8 +189,8 @@ static void __on_tcp_read(uv_stream_t *stream, int nread, const uv_buf_t *buf)
 
 	if (nread == UV_EOF) {
 		int fd;
-		printf("recv eof\n");
 		uv_fileno(&tcp->u.handle, &fd);
+		xu_error(NULL, "fdesc %d eof.", fd);
 		/*
 		 * report close event.
 		 */
@@ -236,9 +234,10 @@ static void __on_accept(uv_stream_t *stream, int err)
 	struct iohandle *server, *ioh;
 
 	if (err == 0) {
+		uv_loop_t *loop = uv_default_loop();
 		server = (struct iohandle *)stream;
 		ioh = __get_h(_ioc);
-		uv_tcp_init(&_ioc->loop, &ioh->u.tcp);
+		uv_tcp_init(loop, &ioh->u.tcp);
 
 		if (uv_accept(stream, &ioh->u.stream) == 0) {
 			union sockaddr_all sal;
@@ -337,13 +336,14 @@ static void __on_dns(uv_getaddrinfo_t *rq, int err, struct addrinfo *ai)
 
 	struct iohandle *ioh = __get_h(_ioc);
 	if (err == 0) {
+		uv_loop_t *loop = uv_default_loop();
 		switch (dr->proto) {
 			case XU_IO_TCP:
-				uv_tcp_init(&_ioc->loop, &ioh->u.tcp);
+				uv_tcp_init(loop, &ioh->u.tcp);
 				err = __listen_tcp(ioh, ai);
 				break;
 			case XU_IO_UDP:
-				uv_udp_init(&_ioc->loop, &ioh->u.udp);
+				uv_udp_init(loop, &ioh->u.udp);
 				err = __listen_udp(ioh, ai);
 				break;
 			default:
@@ -381,6 +381,7 @@ static void __handle_req_server(struct io_context *ic, struct request *req)
 	struct server_req *sr = &req->u.server;
 	int hlen;
 	struct dnsreq *dr;
+	uv_loop_t *loop = uv_default_loop();
 
 	memset(&hints, 0, sizeof hints);
 	sprintf(service, "%d", sr->port);
@@ -408,7 +409,7 @@ static void __handle_req_server(struct io_context *ic, struct request *req)
 	dr->proto = sr->protocol;
 	dr->owner = sr->owner;
 
-	if (uv_getaddrinfo(&ic->loop, &dr->req, __on_dns, node, service, &hints)) {
+	if (uv_getaddrinfo(loop, &dr->req, __on_dns, node, service, &hints)) {
 		__report_eorc(sr->owner, XIE_EVENT_ERROR, -1, XIE_ERR_NOTSUPP);
 		xu_free(dr);
 	}
@@ -545,9 +546,9 @@ static void __on_req(uv_poll_t *uvp, int status, int events)
 void xu_io_init(void)
 {
 	int pfd[2];
+	uv_loop_t *loop =uv_default_loop();
 
 	_ioc = xu_calloc(1, sizeof *_ioc);
-	uv_loop_init(&_ioc->loop);
 
 	_ioc->cap = 32;
 	_ioc->handles = xu_calloc(_ioc->cap, sizeof _ioc->handles[0]);
@@ -560,7 +561,7 @@ void xu_io_init(void)
 		abort();
 	}
 	_ioc->sendfd = pfd[1];
-	uv_poll_init(&_ioc->loop, &_ioc->recvfd, pfd[0]);
+	uv_poll_init(loop, &_ioc->recvfd, pfd[0]);
 	uv_poll_start(&_ioc->recvfd, UV_READABLE, __on_req);
 }
 
@@ -628,6 +629,6 @@ int xu_io_udp_send(uint32_t handle, int fdesc, union sockaddr_all *addr, const v
 
 int xu_io_step()
 {
-	return uv_run(&_ioc->loop, UV_RUN_ONCE);
+	return uv_run(uv_default_loop(), UV_RUN_ONCE);
 }
 

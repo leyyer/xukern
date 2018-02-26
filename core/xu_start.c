@@ -9,101 +9,27 @@
 #include "cJSON.h"
 #include "uv.h"
 
+struct workqueue {
+	uv_work_t req;
+	int busy;
+};
+
 struct worker {
 	int count;
-	uv_mutex_t lock;
-	uv_cond_t  cond;
+
+	uv_timer_t sched;
+
+	uv_prepare_t wup;
+
 	int sleep;
 	int quit;
+
+	struct workqueue wq[0];
 };
 
 static void *__malloc(size_t sz)
 {
 	return xu_malloc(sz);
-}
-
-static void wakeup(struct worker *w, int busy)
-{
-	if (w->sleep >= w->count - busy) {
-		uv_cond_signal(&w->cond);
-	}
-}
-
-static void thread_worker(void *p)
-{
-	struct worker *w = p;
-	struct queue *q = NULL;
-
-	while (!w->quit) {
-		do {
-			q = xu_dispatch_message(q, 0);
-		} while (q);
-
-		uv_mutex_lock(&w->lock);
-		++w->sleep;
-		if (!w->quit) {
-			uv_cond_wait(&w->cond, &w->lock);
-		}
-		--w->sleep;
-		uv_mutex_unlock(&w->lock);
-	}
-}
-
-static void io_thread(void *p)
-{
-	int r;
-	struct worker *w = p;
-	for (;;) {
-		r = xu_io_step();
-		if (r == 0)
-			break;
-		if (xu_actors_total() == 0)
-			break;
-		wakeup(w, 0);
-	}
-	fprintf(stderr, "io_thread quit\n");
-}
-
-static void timer_loop(struct worker *w)
-{
-	while (1) {
-		xu_updatetime();
-		if (xu_actors_total() == 0)
-			break;
-		wakeup(w, w->count - 1);
-		usleep(2500);
-	}
-	uv_mutex_lock(&w->lock);
-	w->quit = 1;
-	uv_cond_broadcast(&w->cond);
-	uv_mutex_unlock(&w->lock);
-}
-
-static void start(int thread)
-{
-	int i;
-	uv_thread_t pid[thread + 1];
-	struct worker *w = xu_malloc(sizeof *w);
-
-	w->count = thread;
-	w->sleep = 0;
-	w->quit = 0;
-	uv_mutex_init(&w->lock);
-	uv_cond_init(&w->cond);
-
-	uv_thread_create(&pid[0], io_thread, w);
-
-	for (i = 0; i < thread; ++i) {
-		uv_thread_create(&pid[i+1], thread_worker, w);
-	}
-	
-	timer_loop(w);
-
-	for (i = 0; i < thread + 1; ++i) {
-		uv_thread_join(&pid[i]);
-	}
-
-	xu_free(w);
 }
 
 static void parsing(int argc, char *argv[])
@@ -134,7 +60,7 @@ void xu_kern_init(int argc, char *argv[])
 		__malloc,
 		xu_free
 	};
-	const char *mod_path;
+	const char *s, *mod_path;
 
 	signal(SIGPIPE, SIG_IGN);
 
@@ -143,6 +69,10 @@ void xu_kern_init(int argc, char *argv[])
 	xu_envinit();
 
 	parsing(argc, argv);
+
+	if ((s = xu_getenv("threads", NULL, 0)) != NULL) {
+		setenv("UV_THREADPOOL_SIZE", s, 1);
+	}
 
 	xu_timer_init();
 	xu_io_init();
@@ -156,11 +86,104 @@ void xu_kern_init(int argc, char *argv[])
 		xu_println("can't find logger");
 		exit(-1);
 	}
-};
+}
+
+static void on_work(uv_work_t *req)
+{
+	struct worker *w = req->data;
+	struct queue *q = NULL;
+
+	do {
+		q = xu_dispatch_message(q, 0);
+	} while (q && !w->quit);
+}
+
+static void on_done(uv_work_t *req, int status)
+{
+	struct worker *w = req->data;
+	struct workqueue *wq = (struct workqueue *)req;
+
+	wq->busy = 0;
+	ATOM_INC(&w->sleep);
+}
+
+static void do_wakeup(struct worker *w, int busy)
+{
+	int i;
+	struct workqueue *wq;
+	if (w->sleep >= w->count - busy) {
+		for (i = 0; i < w->count; ++i) {
+			wq = &w->wq[i];
+			if (wq->busy == 0) {
+				ATOM_CAS(&wq->busy, 0, 1);
+				if (uv_queue_work(uv_default_loop(), &wq->req, on_work, on_done) == 0) {
+					ATOM_DEC(&w->sleep);
+					break;
+				} else {
+					ATOM_CAS(&wq->busy, 1, 0);
+				}
+			}
+		}
+	}
+}
+
+static void on_timer(uv_timer_t *d)
+{
+	struct worker *w = d->data;
+
+	xu_updatetime();
+	do_wakeup(w, w->count - 1);
+}
+
+static void on_prepare(uv_prepare_t *p)
+{
+	struct worker *w = p->data;
+	struct workqueue *wq;
+	int i;
+
+	if (xu_actors_total() == 0) {
+		ATOM_CAS(&w->quit, 0, 1);
+		for (i = 0; i < w->count; ++i) {
+			wq = &w->wq[i];
+			if (wq->busy) {
+				uv_cancel((uv_req_t *)&wq->req);
+			}
+		}
+		uv_stop(uv_default_loop());
+	} else {
+		do_wakeup(w, 0);
+	}
+}
 
 void xu_kern_start()
 {
-	int threads = 3;
-	start(threads);
+	struct worker *w;
+	struct workqueue *wq;
+	int i, threads = 4;
+	char *s;
+	uv_loop_t *loop = uv_default_loop();
+
+	s = getenv("UV_THREADPOOL_SIZE");
+	if (s) 
+		threads = atoi(s);
+	w = xu_calloc(1, sizeof *w + threads * sizeof (struct workqueue));
+	w->count = threads;
+
+	for (i = 0; i < threads; ++i) {
+		wq = &w->wq[i];
+		wq->busy = 0;
+		wq->req.data = w;
+	}
+
+	uv_timer_init(loop, &w->sched);
+	uv_timer_start(&w->sched, on_timer, 3, 3);
+	w->sched.data = w;
+	w->sleep = threads;
+
+	uv_prepare_init(loop, &w->wup);
+	uv_prepare_start(&w->wup, on_prepare);
+	w->wup.data = w;
+
+	uv_run(loop, UV_RUN_DEFAULT);
 }
 
