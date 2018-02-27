@@ -36,6 +36,7 @@ static void parsing(int argc, char *argv[])
 {
 	int i, c;
 	char *agv[argc];
+
 	/* parse arguments, copy argvs locals to parse.*/
 	for (i = 0; i < argc; ++i) {
 		agv[i] = xu_strdup(argv[i]);
@@ -51,6 +52,16 @@ static void parsing(int argc, char *argv[])
 
 	for (i = 0; i < argc; ++i) {
 		xu_free(agv[i]);
+	}
+}
+
+static void load_logger()
+{
+	struct xu_actor *ctx;
+	ctx = xu_actor_new("logger", "");
+	if (ctx == NULL) {
+		xu_println("can't find logger");
+		exit(-1);
 	}
 }
 
@@ -79,13 +90,7 @@ void xu_kern_init(int argc, char *argv[])
 
 	mod_path = xu_getenv("mod_path", NULL, 0);
 	xu_kern_global_init(mod_path ?: "./svc" );
-
-	struct xu_actor *ctx;
-	ctx = xu_actor_new("logger", "");
-	if (ctx == NULL) {
-		xu_println("can't find logger");
-		exit(-1);
-	}
+	load_logger();
 }
 
 static void on_work(uv_work_t *req)
@@ -103,8 +108,9 @@ static void on_done(uv_work_t *req, int status)
 	struct worker *w = req->data;
 	struct workqueue *wq = (struct workqueue *)req;
 
-	wq->busy = 0;
+	ATOM_CAS(&wq->busy, 1, 0);
 	ATOM_INC(&w->sleep);
+/*	xu_error(NULL, "thread %p done: %d", wq, w->sleep); */
 }
 
 static void do_wakeup(struct worker *w, int busy)
@@ -118,6 +124,7 @@ static void do_wakeup(struct worker *w, int busy)
 				ATOM_CAS(&wq->busy, 0, 1);
 				if (uv_queue_work(uv_default_loop(), &wq->req, on_work, on_done) == 0) {
 					ATOM_DEC(&w->sleep);
+/*					xu_error(NULL, "thread %p wakeup: %d", wq, w->sleep); */
 					break;
 				} else {
 					ATOM_CAS(&wq->busy, 1, 0);
@@ -141,7 +148,8 @@ static void on_prepare(uv_prepare_t *p)
 	struct workqueue *wq;
 	int i;
 
-	if (xu_actors_total() == 0) {
+	if (xu_actors_total() == 0) { /* stop loopping */
+		fprintf(stderr, "stopping\n");
 		ATOM_CAS(&w->quit, 0, 1);
 		for (i = 0; i < w->count; ++i) {
 			wq = &w->wq[i];
@@ -184,6 +192,7 @@ void xu_kern_start()
 	uv_prepare_start(&w->wup, on_prepare);
 	w->wup.data = w;
 
+	xu_error(NULL, "running");
 	uv_run(loop, UV_RUN_DEFAULT);
 }
 

@@ -5,10 +5,12 @@
 
 #define XIE_EVENT_ERROR      1
 #define XIE_EVENT_LISTEN     2
-#define XIE_EVENT_CONNECTION 3
-#define XIE_EVENT_MESSAGE    4 /* UDP */
-#define XIE_EVENT_DATA       5
-#define XIE_EVENT_CLOSE      6
+#define XIE_EVENT_CONNECT    3
+#define XIE_EVENT_CONNECTION 4
+#define XIE_EVENT_MESSAGE    5 /* UDP DATA */
+#define XIE_EVENT_DATA       6
+#define XIE_EVENT_CLOSE      7
+#define XIE_EVENT_DRAIN      8
 
 #define XIE_ERR_SUCC      0
 #define XIE_ERR_DNS       1
@@ -18,9 +20,7 @@
 #define XIE_ERR_LOOKUP    5
 #define XIE_ERR_NOTSUPP   6
 #define XIE_ERR_EOF       7
-
-#define XIE_EVENT_MASK  (0xffffff)
-#define XIE_EVENT_SHIFT (24)
+#define XIE_ERR_CONNECT   8
 
 union sockaddr_all {
 	struct sockaddr     in;
@@ -30,7 +30,8 @@ union sockaddr_all {
 
 struct xu_io_event {
 	uint32_t fdesc;
-	size_t   size; /* 1 byte (event) + 3 bytes (length) */
+	int      event;
+	size_t   size; 
 	union {
 		int  errcode;
 		union sockaddr_all sa;
@@ -38,14 +39,17 @@ struct xu_io_event {
 	char data[0];
 };
 
-int xu_io_tcp_server(uint32_t handle, const char *addr, int port);
-int xu_io_tcp_connect(uint32_t handle, const char *addr, int port);
+uint32_t xu_io_tcp_server(uint32_t handle, const char *addr, int port);
+uint32_t xu_io_tcp_connect(uint32_t handle, const char *addr, int port);
 
 int xu_io_fd_open(uint32_t handle, int fd);
 int xu_io_write(uint32_t handle, uint32_t fdesc, const void *data, int len);
 
-int xu_io_udp_server(uint32_t handle, const char *addr, int port);
-int xu_io_udp_client(uint32_t handle, const char *p, int port);
+int xu_io_close(uint32_t handle, uint32_t fdesc);
+
+uint32_t xu_io_udp_server(uint32_t handle, const char *addr, int port);
+uint32_t xu_io_udp_open(uint32_t handle);
+
 int xu_io_udp_send(uint32_t handle, uint32_t fdesc, union sockaddr_all *, const void *data, int len);
 #endif
 

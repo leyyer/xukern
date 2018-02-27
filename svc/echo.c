@@ -24,7 +24,6 @@ static int __dispatch(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, v
 {
 	struct xu_io_event *e;
 	struct echo *echo = ud;
-	int type;
 	size_t size;
 	int r = 0;
 
@@ -33,10 +32,9 @@ static int __dispatch(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, v
 	}
 
 	e = msg;
-	type = e->size >> XIE_EVENT_SHIFT;
-	size = e->size & XIE_EVENT_MASK;
-	xu_error(ctx, "event_type: %d, size: %d", type, size);
-	switch (type) {
+	size = e->size;
+	xu_error(ctx, "event_type: %d, size: %d", e->event, size);
+	switch (e->event) {
 		case XIE_EVENT_LISTEN:
 			xu_error(ctx, "listen fd: %d", e->fdesc);
 			if (echo->udp < 0)
@@ -55,6 +53,7 @@ static int __dispatch(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, v
 			r = 1;
 			break;
 		case XIE_EVENT_DATA:
+			xu_error(ctx, "msg data ...");
 			xu_io_write(echo->handle, e->fdesc, e->data, size);
 			break;
 	}

@@ -104,8 +104,8 @@ static void log_blob(FILE *f, const void * buffer, size_t sz)
 
 static void log_io(FILE * f, const struct xu_io_event * message, size_t sz)
 {
-	size_t size = message->size & XIE_EVENT_MASK;
-	fprintf(f, "[io] %d %d %d %d", (message->size) >> XIE_EVENT_SHIFT, message->fdesc, size, message->u.errcode);
+	size_t size = message->size;
+	fprintf(f, "[io] %d %d %d %d", message->event, message->fdesc, size, message->u.errcode);
 
 	if (sz > 0) {
 		const void *ud = message->data;
