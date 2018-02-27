@@ -48,6 +48,8 @@ uint32_t xu_actor_findname(const char *name);
 const char *xu_actor_namehandle(uint32_t h, const char *name);
 uint32_t xu_actor_handle(struct xu_actor *);
 
+int xu_actor_name(struct xu_actor *ctx, char *buf, int len);
+
 void xu_error(struct xu_actor * context, const char *msg, ...);
 
 /*
@@ -57,6 +59,8 @@ uint64_t xu_now(void);
 uint64_t xu_starttime(void);
 void xu_updatetime(void);
 int xu_timeout(uint32_t handle, int time, int session);
+void xu_setenv(const char *env, const char *value);
+const char *xu_getenv(const char *env, char *buf, size_t size);
 
 #ifdef __cplusplus
 }

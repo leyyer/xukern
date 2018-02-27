@@ -565,24 +565,30 @@ void xu_actor_callback(struct xu_actor *ctx, void *ud, xu_callback_t cb)
 	ctx->cb = cb;
 }
 
+int xu_actor_name(struct xu_actor *ctx, char *buf, int len)
+{
+	int r;
+
+	if (ctx->name[0] == '\0') {
+		r = snprintf(buf, len, ":%08x", xu_actor_handle(ctx));
+	} else {
+		r = xu_strlcpy(buf, ctx->name, len);
+	}
+
+	return r;
+}
+
 const char *xu_actor_namehandle(uint32_t h, const char *name)
 {
-	struct actor_mgr *s = _am;
 	struct xu_actor *xa;
 	const char *r = NULL;
 
-	rwlock_wlock(&s->lock);
-	for (int i = 0; i < s->slot_size; ++i) {
-		if (s->slot[i]) {
-			xa = s->slot[i];
-			if (xa->handle == h) {
-				xu_strlcpy(xa->name, name, sizeof xa->name);
-				r = xa->name;
-				break;
-			}
-		}
+	xa = xu_handle_ref(h);
+	if (xa) {
+		xu_strlcpy(xa->name, name, sizeof xa->name);
+		r = xa->name;
+		xu_actor_unref(xa);
 	}
-	rwlock_wunlock(&s->lock);
 
 	return (r);
 }

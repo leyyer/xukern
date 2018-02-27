@@ -1,4 +1,4 @@
-MODS := logger.so  echo.so
+MODS := logger.so  echo.so xulua.so
 
 LDFLAGS += -L../ -lxucore
 
@@ -12,4 +12,6 @@ logger.so : logger.c
 console.so : console.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared $^ -o $@ 
 echo.so : echo.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared $^ -o $@ 
+xulua.so : xulua.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared $^ -o $@ 

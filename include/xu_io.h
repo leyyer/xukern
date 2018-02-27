@@ -48,7 +48,7 @@ int xu_io_write(uint32_t handle, uint32_t fdesc, const void *data, int len);
 int xu_io_close(uint32_t handle, uint32_t fdesc);
 
 uint32_t xu_io_udp_server(uint32_t handle, const char *addr, int port);
-uint32_t xu_io_udp_open(uint32_t handle);
+uint32_t xu_io_udp_open(uint32_t handle, int udp6);
 
 int xu_io_udp_send(uint32_t handle, uint32_t fdesc, union sockaddr_all *, const void *data, int len);
 #endif

@@ -9,6 +9,7 @@
 #include "cJSON.h"
 #include "uv.h"
 
+#define XU_DEFAULT_THREADS (2)
 struct workqueue {
 	uv_work_t req;
 	int busy;
@@ -58,7 +59,19 @@ static void parsing(int argc, char *argv[])
 static void load_logger()
 {
 	struct xu_actor *ctx;
-	ctx = xu_actor_new("logger", "");
+	char log[256] = {0};
+	char *p, *args;
+
+	if (xu_getenv("logger", log, sizeof log) != NULL) {
+		args = log;
+		p = strsep(&args, " \t\r\n");
+		args = strsep(&args, "\r\n");
+	} else {
+		p = "logger";
+		args = "";
+	}
+
+	ctx = xu_actor_new(p, args);
 	if (ctx == NULL) {
 		xu_println("can't find logger");
 		exit(-1);
@@ -83,6 +96,10 @@ void xu_kern_init(int argc, char *argv[])
 
 	if ((s = xu_getenv("threads", NULL, 0)) != NULL) {
 		setenv("UV_THREADPOOL_SIZE", s, 1);
+	} else {
+		char thr[4] = {0};
+		snprintf(thr, sizeof thr, "%d", XU_DEFAULT_THREADS);
+		setenv("UV_THREADPOOL_SIZE", thr, 1);
 	}
 
 	xu_timer_init();
@@ -167,7 +184,7 @@ void xu_kern_start()
 {
 	struct worker *w;
 	struct workqueue *wq;
-	int i, threads = 4;
+	int i, threads = XU_DEFAULT_THREADS;
 	char *s;
 	uv_loop_t *loop = uv_default_loop();
 

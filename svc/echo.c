@@ -67,8 +67,8 @@ int echo_init(struct xu_actor *ctx, struct echo *echo, const char *param)
 	echo->handle = xu_actor_handle(ctx);
 	xu_actor_namehandle(echo->handle, "echo");
 	xu_actor_callback(ctx, echo, __dispatch);
-	xu_io_udp_server(echo->handle, NULL, 8000);
-	xu_io_tcp_server(echo->handle, NULL, 8001);
+	xu_io_udp_server(echo->handle, NULL, 60001);
+	xu_io_tcp_server(echo->handle, NULL, 60002);
 	xu_error(ctx, "echo init");
 	return 0;
 }

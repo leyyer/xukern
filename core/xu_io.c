@@ -39,6 +39,10 @@ struct req_usend {
 	const void *data;
 };
 
+struct req_uopen {
+	int udp6;
+};
+
 #define REQ_TYPE_SHIFT (24)
 #define REQ_TYPE_MASK  (0xffffff)
 struct header {
@@ -54,6 +58,7 @@ struct request {
 		struct req_host host;
 		struct req_write  write;
 		struct req_usend  usend;
+		struct req_uopen  uopen;
 	} u;
 };
 
@@ -61,7 +66,8 @@ struct request {
 #define IO_HF_CONNECTING 1
 #define IO_HF_CONNECTED  2
 #define IO_HF_LISTEN     3
-#define IO_HF_CLOSING   4
+#define IO_HF_CLOSING    4
+#define IO_HF_UDP_OPENED 5
 
 struct iohandle {
 	union {
@@ -98,7 +104,7 @@ static void __on_close(uv_handle_t *h)
 {
 	struct iohandle *ih = (struct iohandle *)h;
 
-	xu_error(NULL, "freeing handle[%u] %p", ih->handle, ih);
+	xu_error(NULL, "freeing owner [%u]  fd[%u] %p", ih->owner, ih->handle, ih);
 
 	xu_free(ih);
 }
@@ -181,7 +187,7 @@ static struct iohandle *alloc_iohandle(struct io_context *ic)
 	return ioh;
 }
 
-static struct iohandle *__find_h(struct io_context *ic, uint32_t owner, uint32_t fdesc)
+static struct iohandle *__find_io(struct io_context *ic, uint32_t owner, uint32_t fdesc)
 {
 	struct iohandle *h = NULL, *it;
 
@@ -288,9 +294,14 @@ static int __listen_tcp(struct iohandle *ioh, struct addrinfo *ai)
 	struct addrinfo *ni = ai;
 
 	while (ni) {
+//		printf("ai_family: %s\n", (ai->ai_family == AF_INET ? "inet" : (ai->ai_family == AF_INET6 ? "inet6" : "unknown")));
+//		printf("ai_socktype: %s\n", (ai->ai_socktype == SOCK_STREAM ? "tcp" : (ai->ai_socktype == SOCK_DGRAM ? "udp" : "unknown")));
 		err = uv_tcp_bind(&ioh->u.tcp, ai->ai_addr, 0);
 		if (!err) {
-			return uv_listen(&ioh->u.stream, 32, __on_accept);
+			err =  uv_listen(&ioh->u.stream, 32, __on_accept);
+			if (err == 0) {
+				break;
+			}
 		}
 		ni = ni->ai_next;
 	}
@@ -350,6 +361,9 @@ static void __on_dns_server(struct dnsreq *dr, int err, struct addrinfo *ai)
 {
 	struct iohandle *ioh = alloc_iohandle(_ioc);
 
+	ioh->owner = dr->owner;
+	ioh->handle = dr->handle;
+	ioh->protocol = dr->proto;
 	if (err == 0) {
 		uv_loop_t *loop = uv_default_loop();
 		switch (dr->proto) {
@@ -373,14 +387,15 @@ static void __on_dns_server(struct dnsreq *dr, int err, struct addrinfo *ai)
 	 */
 	if (err == 0) {
 		ioh->flag = IO_HF_LISTEN;
-		ioh->protocol = dr->proto;
-		ioh->owner    = dr->owner;
-		ioh->handle   = dr->handle;
 		__report_lora(dr->owner, XIE_EVENT_LISTEN, ioh->handle, ai->ai_addr);
 	} else { /* report error */
-		xu_error(NULL, "dns error: %d", err);
+		struct xu_actor *xa = xu_handle_ref(dr->owner);
+		xu_error(xa, "dns error: %s", uv_strerror(err));
 		__report_eorc(dr->owner,  XIE_EVENT_ERROR, -1, XIE_ERR_LISTEN);
 		__close_handle(ioh, XIE_ERR_LISTEN);
+		if (xa) {
+			xu_actor_unref(xa);
+		}
 	}
 }
 
@@ -458,12 +473,19 @@ skip:
 static void __handle_req_uopen(struct io_context *ic, struct request *req)
 {
 	struct iohandle *udp;
+	struct req_uopen *ru = &req->u.uopen;
 
 	udp = alloc_iohandle(ic);
-	uv_udp_init(uv_default_loop(), &udp->u.udp);
+
+	if (uv_udp_init_ex(uv_default_loop(), &udp->u.udp, ru->udp6 ? AF_INET6 : AF_INET)) {
+		/* XXX: report error */
+	}
+
+	uv_udp_recv_start(&udp->u.udp, __on_alloc, __on_udp_recv);
 
 	udp->owner = req->header.owner;
 	udp->handle = req->header.fdesc;
+	udp->flag = IO_HF_UDP_OPENED;
 }
 
 static void __handle_req_host(struct io_context *ic, struct request *req)
@@ -521,7 +543,7 @@ static void __on_write(uv_write_t *req, int err)
 static void __handle_req_write(struct io_context *ic, struct request *req)
 {
 	struct req_write *wr = &req->u.write;
-	struct iohandle *h = __find_h(ic, req->header.owner, req->header.fdesc);
+	struct iohandle *h = __find_io(ic, req->header.owner, req->header.fdesc);
 	uv_write_t *uwr;
 
 	if (h && h->flag == IO_HF_CONNECTED) {
@@ -542,15 +564,20 @@ static void __handle_req_write(struct io_context *ic, struct request *req)
 
 static void __on_send(uv_udp_send_t *uwr, int status)
 {
+	struct iohandle *udp = uwr->data;
+
+	//printf("udp_send recv %d\n", status);
+	__report_drain(udp->owner, udp->handle, status);
 	xu_free(uwr);
 }
 
 static void __handle_req_usend(struct io_context *ic, struct request *req)
 {
 	struct req_usend *wr = &req->u.usend;
-	struct iohandle *h = __find_h(ic, req->header.owner, req->header.fdesc);
+	struct iohandle *h = __find_io(ic, req->header.owner, req->header.fdesc);
 	uv_udp_send_t *uwr;
 
+	//printf("usend_req: %p, owner: %u, fdesc: %u\n", h, req->header.owner, req->header.fdesc);
 	if (h) {
 		uv_buf_t buf;
 		uwr = xu_malloc(sizeof *uwr);
@@ -569,7 +596,7 @@ static void __handle_req_usend(struct io_context *ic, struct request *req)
 
 static void __handle_req_close(struct io_context *ic, struct request *req)
 {
-	struct iohandle *h = __find_h(ic, req->header.owner, req->header.fdesc);
+	struct iohandle *h = __find_io(ic, req->header.owner, req->header.fdesc);
 
 	if (h) {
 		__close_handle(h, 0);
@@ -704,7 +731,10 @@ static uint32_t __io_host(uint32_t h, int e, const char *addr, int port, int pro
 		size_t len = strlen(addr);
 		size_t vlen = sizeof req.u - sizeof *sr;
 		if (len > vlen - 1) {
-			xu_error(NULL, "address %s too long.", addr);
+			struct xu_actor *xa = xu_handle_ref(h);
+			xu_error(xa, "address %s too long.", addr);
+			if (xa)
+				xu_actor_unref(xa);
 			return -1;
 		}
 		len = xu_strlcpy(sr->host, addr, vlen);
@@ -739,14 +769,20 @@ int xu_io_write(uint32_t handle, uint32_t fdesc, const void *data, int len)
 	struct request req;
 	struct req_write *wr;
 
+	if (len <= 0) {
+		return -1;
+	}
+
 	wr = &req.u.write;
 	wr->len   = len;
 	wr->data  = data;
+#if 0
 	{
 		struct xu_actor *ctx = xu_handle_ref(handle);
 		xu_error(ctx, "write: %d bytes", len);
 		xu_actor_unref(ctx);
 	}
+#endif
 	return __send_req(&req, IO_REQ_WRITE, handle, fdesc, sizeof *wr) != sizeof *wr;
 }
 
@@ -763,15 +799,18 @@ int xu_io_udp_send(uint32_t handle, uint32_t fdesc, union sockaddr_all *addr, co
 	return __send_req(&req, IO_REQ_UDPSEND, handle, fdesc, sizeof *ur) != sizeof *ur;
 }
 
-uint32_t xu_io_udp_open(uint32_t handle)
+uint32_t xu_io_udp_open(uint32_t handle, int udp6)
 {
 	struct request req;
+	struct req_uopen *ru;
 	uint32_t fdesc;
 
+	ru = &req.u.uopen;
+	ru->udp6 = udp6;
 	SPIN_LOCK(_ioc);
 	fdesc = _ioc->handle_index++;
 	SPIN_UNLOCK(_ioc);
-	__send_req(&req, IO_REQ_UOPEN, handle, fdesc, 0);
+	__send_req(&req, IO_REQ_UOPEN, handle, fdesc, sizeof *ru);
 
 	return fdesc;
 }
