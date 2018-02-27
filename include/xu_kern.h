@@ -25,6 +25,10 @@ struct xu_msg {
 	size_t      sz; /* type | size */
 };
 
+#define container_of(ptr, type, member) ({              \
+		const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+		(type *)( (char *)__mptr - offsetof(type,member) );})
+
 struct queue;
 struct xu_actor;
 

@@ -31,18 +31,9 @@ BTIF_OBJS := btif/slip.o \
 	btif/btif.o \
 	btif/lua_btif.o \
 
-LUA_OBJS := core/builtin/lua_buffer.o \
-			core/builtin/lua_net.o \
-			core/builtin/lua_timer.o \
-
 OBJS += core/xu_utils.o \
 		core/xu_malloc.o \
-		core/xu_print.o \
-		core/xu_init.o \
 		core/xu_env.o \
-		core/xu_ctx.o \
-		core/xu_udp.o \
-		core/xu_tcp.o \
 		core/xu_kern.o \
 		core/xu_time.o \
 		core/xu_start.o \
@@ -51,7 +42,7 @@ OBJS += core/xu_utils.o \
 
 OBJS += $(LUA_OBJS)
 
-all: libxucore.so demo
+all: libxucore.so kern
 
 libxucore.so : $(OBJS)
 	$(CC) -shared $(LDFLAGS) $(LINK_ARCHIVES) -o $@ $^

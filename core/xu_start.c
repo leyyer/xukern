@@ -73,7 +73,8 @@ static void load_logger()
 
 	ctx = xu_actor_new(p, args);
 	if (ctx == NULL) {
-		xu_println("can't find logger");
+		fprintf(stderr, "can't find logger\n");
+		fflush(stderr);
 		exit(-1);
 	}
 }
