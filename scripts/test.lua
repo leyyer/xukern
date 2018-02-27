@@ -6,7 +6,7 @@ actor.name("loader")
 in6 = actor.address("[::0]", 8000)
 print(in6:address(), in6:port(), in6:family())
 
---in4 = actor.address("192.168.111.128", 8000)
+in4 = actor.address("192.168.111.128", 8000)
 --print(in4:address(), in4:port(), in4:family())
 
 udp = actor.udpOpen()

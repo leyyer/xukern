@@ -39,6 +39,7 @@ typedef int (*xu_callback_t)(struct xu_actor *, void *ud, int type, uint32_t src
 
 void xu_actor_callback(struct xu_actor *ctx, void *ud, xu_callback_t cb);
 
+int xu_handle_retire(uint32_t handle);
 struct xu_actor *xu_handle_ref(uint32_t handle);
 struct xu_actor *xu_actor_unref(struct xu_actor *ctx);
 

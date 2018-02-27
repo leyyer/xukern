@@ -2,6 +2,6 @@
 	"environ": {
 		"threads" : "4",
 		"mod_path" : "./svc",
-		"logger" : "logger log.txt"
+		"logger" : "logger"
 	}
 }

@@ -256,7 +256,7 @@ static uint32_t xu_actor_register(struct xu_actor *xa)
 	}
 }
 
-int xu_actor_retire(uint32_t handle)
+int xu_handle_retire(uint32_t handle)
 {
 	int r = 0;
 	struct actor_mgr *s = _am;
@@ -479,7 +479,7 @@ struct xu_actor *xu_actor_new(const char *name, const char *p)
 		uint32_t handle = xa->handle;
 		xu_actor_unref(xa);
 		xu_queue_free(q);
-		xu_actor_retire(handle);
+		xu_handle_retire(handle);
 		return NULL;
 	}
 }

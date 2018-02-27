@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include "xu_kern.h"
@@ -157,6 +158,14 @@ static int __xie_tostring(lua_State *L)
 	return 1;
 }
 
+static int __xie_get_data(lua_State *L)
+{
+	struct xu_io_event *xie = lua_touserdata(L, 1);
+
+	lua_pushlightuserdata(L, xie->data);
+	return 1;
+}
+
 static void __xio_event(lua_State *L)
 {
 	static luaL_reg xe[] = {
@@ -165,11 +174,87 @@ static void __xio_event(lua_State *L)
 		{"len", __xie_get_len},
 		{"errno", __xie_get_errcode},
 		{"tostring", __xie_tostring},
+		{"data", __xie_get_data},
 		{"address", __xie_get_address},
 		{"free", __xie_free},
 		{NULL, NULL}
 	};
 	luaL_openlib(L, "ioevent", xe, 0);
+	lua_pop(L, 1);
+}
+
+static int __buf_read_u8(lua_State *L)
+{
+	unsigned char *buf = lua_touserdata(L, 1);
+	int off = luaL_checkinteger(L, 2);
+
+	lua_pushinteger(L, buf[off]);
+
+	return 1;
+}
+
+static int __buf_read8(lua_State *L)
+{
+	signed char *buf = lua_touserdata(L, 1);
+	int off = luaL_checkinteger(L, 2);
+
+	lua_pushinteger(L, buf[off]);
+
+	return 1;
+}
+
+static int __buf_read_u16(lua_State *L)
+{
+	unsigned short *buf = lua_touserdata(L, 1);
+	int off = luaL_checkinteger(L, 2);
+
+	lua_pushinteger(L, buf[off/2]);
+
+	return 1;
+}
+
+static int __buf_read16(lua_State *L)
+{
+	signed short *buf = lua_touserdata(L, 1);
+	int off = luaL_checkinteger(L, 2);
+
+	lua_pushinteger(L, buf[off/2]);
+
+	return 1;
+}
+
+static int __buf_read_u32(lua_State *L)
+{
+	unsigned int *buf = lua_touserdata(L, 1);
+	int off = luaL_checkinteger(L, 2);
+
+	lua_pushinteger(L, buf[off/4]);
+
+	return 1;
+}
+
+static int __buf_read32(lua_State *L)
+{
+	signed int *buf = lua_touserdata(L, 1);
+	int off = luaL_checkinteger(L, 2);
+
+	lua_pushinteger(L, buf[off/4]);
+
+	return 1;
+}
+
+static void __xio_buffer(lua_State *L)
+{
+	static luaL_reg xb[] = {
+		{"readu8", __buf_read_u8},
+		{"read8", __buf_read8},
+		{"readu16", __buf_read_u16},
+		{"read16", __buf_read16},
+		{"reau32", __buf_read_u32},
+		{"read32", __buf_read32},
+		{NULL, NULL}
+	};
+	luaL_openlib(L, "rdbuf", xb, 0);
 	lua_pop(L, 1);
 }
 
@@ -589,6 +674,50 @@ static int lerror(lua_State *L)
 	return 0;
 }
 
+static uint32_t tohandle(struct xu_actor * context, const char * param) {
+	uint32_t handle = 0;
+	if (param[0] == ':') {
+		handle = strtoul(param+1, NULL, 16);
+	} else if (param[0] == '.') {
+		handle = xu_actor_findname(param+1);
+	} else {
+		xu_error(context, "Can't convert %s to handle",param);
+	}
+
+	return handle;
+}
+
+static void do_exit(struct xu_actor *ctx, uint32_t handle)
+{
+	if (handle == 0) {
+		handle = xu_actor_handle(ctx);
+		xu_error(ctx, "kill self");
+	} else {
+		xu_error(ctx, "kill :08x", handle);
+	}
+	xu_handle_retire(handle);
+}
+
+static int lexit(lua_State *L)
+{
+	struct xu_actor *ctx = lua_touserdata(L, lua_upvalueindex(1));
+	do_exit(ctx, 0);
+	return 0;
+}
+
+static int lkill(lua_State *L)
+{
+	struct xu_actor *ctx = lua_touserdata(L, lua_upvalueindex(1));
+	const char *p;
+	p = luaL_checkstring(L, 1);
+
+	uint32_t handle = tohandle(ctx, p);
+	if (handle) {
+		do_exit(ctx, handle);
+	}
+	return 0;
+}
+
 static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, void *msg, size_t sz)
 {
 	struct xulua *l = ud;
@@ -602,6 +731,8 @@ static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, vo
 		{"timeout",  ltimeout},
 		{"send",     lsend},
 		{"launch",   llaunch},
+		{"exit",     lexit},
+		{"kill",     lkill},
 		{"getenv",   lgetenv},
 		{"setenv",   lsetenv},
 		{"now",      lnow},
@@ -631,6 +762,7 @@ static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, vo
 
 	__sock_addr_mt(L);
 	__xio_event(L);
+	__xio_buffer(L);
 
 	if ((loader = xu_getenv("lua_loader", NULL, 0)) == NULL)
 		loader = "./scripts/loader.lua";
