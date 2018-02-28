@@ -2,6 +2,7 @@
 	"environ": {
 		"threads" : "8",
 		"mod_path" : "./svc",
-		"logger" : "logger"
+		"logger" : "logger",
+		"bootstrap" : "xulua tcpecho"
 	}
 }

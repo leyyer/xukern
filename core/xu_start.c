@@ -79,6 +79,28 @@ static void load_logger()
 	}
 }
 
+static void bootstrap()
+{
+	char buf[BUFSIZ] = {0};
+	char *p, *args;
+	struct xu_actor *ctx;
+
+	if (xu_getenv("bootstrap", buf, sizeof buf) == NULL) {
+		xu_error(NULL, "can't find bootstrap.");
+		return;
+	}
+	args = buf;
+	p = strsep(&args, " \t\r\n");
+	args = strsep(&args, "\r\n");
+
+	ctx = xu_actor_new(p, args);
+	if (ctx == NULL) {
+		xu_error(NULL, "can't load bootstrap");
+	} else {
+		xu_error(ctx, "bootstrapping");
+	}
+}
+
 void xu_kern_init(int argc, char *argv[])
 {
 	static cJSON_Hooks hook = {
@@ -209,6 +231,8 @@ void xu_kern_start()
 	uv_prepare_init(loop, &w->wup);
 	uv_prepare_start(&w->wup, on_prepare);
 	w->wup.data = w;
+
+	bootstrap();
 
 	xu_error(NULL, "running");
 	uv_run(loop, UV_RUN_DEFAULT);
