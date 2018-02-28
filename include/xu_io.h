@@ -41,8 +41,10 @@ struct xu_io_event {
 
 uint32_t xu_io_tcp_server(uint32_t handle, const char *addr, int port);
 uint32_t xu_io_tcp_connect(uint32_t handle, const char *addr, int port);
+int xu_io_tcp_nodelay(uint32_t handle, uint32_t fdesc, int on);
+int xu_io_tcp_keepalive(uint32_t handle, uint32_t fdesc, int enable, int delay);
 
-int xu_io_fd_open(uint32_t handle, int fd);
+uint32_t xu_io_fd_open(uint32_t handle, int fd);
 int xu_io_write(uint32_t handle, uint32_t fdesc, const void *data, int len);
 
 int xu_io_close(uint32_t handle, uint32_t fdesc);
@@ -51,5 +53,11 @@ uint32_t xu_io_udp_server(uint32_t handle, const char *addr, int port);
 uint32_t xu_io_udp_open(uint32_t handle, int udp6);
 
 int xu_io_udp_send(uint32_t handle, uint32_t fdesc, union sockaddr_all *, const void *data, int len);
+int xu_io_udp_membership(uint32_t handle, uint32_t fdesc, const char *mcast, const char *iaddr, int join);
+int xu_io_udp_set_multicast_loop(uint32_t handle, uint32_t fdesc, int on);
+int xu_io_udp_set_broadcast(uint32_t handle, uint32_t fdesc, int on);
+int xu_io_udp_set_ttl(uint32_t handle, uint32_t fd, int on);
+int xu_io_udp_set_multicast_ttl(uint32_t handle, uint32_t fd, int on);
+
 #endif
 

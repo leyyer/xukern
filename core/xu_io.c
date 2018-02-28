@@ -12,15 +12,20 @@
 #include "xu_io.h"
 #include "list.h"
 
+#define TCP_BACKLOG (32)
+
 #define XU_IO_TCP  1
 #define XU_IO_UDP  2
 
-#define IO_REQ_SERVER  1
-#define IO_REQ_WRITE   2
-#define IO_REQ_UDPSEND 3
-#define IO_REQ_CLOSE   4
+#define IO_REQ_SERVER      1
+#define IO_REQ_WRITE       2
+#define IO_REQ_UDPSEND     3
+#define IO_REQ_CLOSE       4
 #define IO_REQ_TCP_CONNECT 5
-#define IO_REQ_UOPEN   6
+#define IO_REQ_UOPEN       6
+#define IO_REQ_MEMBERSHIP  7
+#define IO_REQ_FLAGS       8
+#define IO_REQ_POLLFD      9
 
 struct req_host {
 	uint16_t  protocol;
@@ -43,6 +48,26 @@ struct req_uopen {
 	int udp6;
 };
 
+struct req_membership {
+	int mlen;
+	int ilen;
+	int join;
+	char maddr[108];
+	char iaddr[108];
+};
+
+#define REQ_FLAGS_MCAST_LOOP     1
+#define REQ_FLAGS_BROADCAST      2
+#define REQ_FLAGS_UDP_TTL        3
+#define REQ_FLAGS_UDP_MCAST_TTL  4
+#define REQ_FLAGS_TCP_NODELAY    5
+#define REQ_FLAGS_TCP_KEEPALIVE  6
+struct req_flags {
+	int flag;
+	int how;
+	int reserved;
+};
+
 #define REQ_TYPE_SHIFT (24)
 #define REQ_TYPE_MASK  (0xffffff)
 struct header {
@@ -55,10 +80,13 @@ struct request {
 	struct header header;
 	union {
 		char buffer[256];
+		int  reserved;
 		struct req_host host;
 		struct req_write  write;
 		struct req_usend  usend;
 		struct req_uopen  uopen;
+		struct req_membership membership;
+		struct req_flags  flags;
 	} u;
 };
 
@@ -99,6 +127,40 @@ struct io_context {
 };
 
 static struct io_context *_ioc = NULL;
+
+static inline int __read(int fd, void *buf, int len)
+{
+	int r;
+
+	do {
+		r = read(fd, buf, len);
+	} while ((r == -1 ) && (errno == EINTR || errno == EAGAIN));
+
+	return (r);
+}
+
+static inline int __write(int fd, void *buf, int len)
+{
+	int r;
+
+	do {
+		r = write(fd, buf, len);
+	} while ((r == -1) && (errno == EINTR || errno == EAGAIN));
+	return (r);
+}
+
+static uint32_t __get_fdesc()
+{
+	uint32_t h;
+
+	SPIN_LOCK(_ioc);
+	h = _ioc->handle_index++;
+	if (_ioc->handle_index == 0)
+		_ioc->handle_index = 1;
+	SPIN_UNLOCK(_ioc);
+
+	return (h);
+}
 
 static void __on_close(uv_handle_t *h)
 {
@@ -275,9 +337,7 @@ static void __on_accept(uv_stream_t *stream, int err)
 			ioh->protocol = server->protocol;
 			ioh->owner = server->owner;
 			/* new connection */
-			SPIN_LOCK(_ioc);
-			ioh->handle = _ioc->handle_index++;
-			SPIN_UNLOCK(_ioc);
+			ioh->handle = __get_fdesc();
 			namelen = sizeof sal;
 			uv_tcp_getpeername(&ioh->u.tcp, (void *)&sal, &namelen);
 			__report_lora(server->owner, XIE_EVENT_CONNECTION, ioh->handle, &sal.in);
@@ -298,7 +358,7 @@ static int __listen_tcp(struct iohandle *ioh, struct addrinfo *ai)
 //		printf("ai_socktype: %s\n", (ai->ai_socktype == SOCK_STREAM ? "tcp" : (ai->ai_socktype == SOCK_DGRAM ? "udp" : "unknown")));
 		err = uv_tcp_bind(&ioh->u.tcp, ai->ai_addr, 0);
 		if (!err) {
-			err =  uv_listen(&ioh->u.stream, 32, __on_accept);
+			err =  uv_listen(&ioh->u.stream, TCP_BACKLOG, __on_accept);
 			if (err == 0) {
 				break;
 			}
@@ -603,6 +663,88 @@ static void __handle_req_close(struct io_context *ic, struct request *req)
 	}
 }
 
+static void __handle_req_membership(struct io_context *ic, struct request *req)
+{
+	struct iohandle *h = __find_io(ic, req->header.owner, req->header.fdesc);
+	struct req_membership *rm = &req->u.membership;
+
+	if (h) {
+		if (uv_udp_set_membership(&h->u.udp, rm->maddr, rm->iaddr, rm->join ? UV_JOIN_GROUP : UV_LEAVE_GROUP)) { /* XXX: report error */
+		} 
+	}
+}
+
+static void __handle_req_flags(struct io_context *ic, struct request *req)
+{
+	struct iohandle *h = __find_io(ic, req->header.owner, req->header.fdesc);
+
+	if (!h) { /* XXX: report error ? */
+		return;
+	}
+	struct req_flags *rf = &req->u.flags;
+	switch (rf->flag) {
+		case REQ_FLAGS_MCAST_LOOP:
+			uv_udp_set_multicast_loop(&h->u.udp, rf->how);
+			break;
+		case REQ_FLAGS_BROADCAST:
+			uv_udp_set_broadcast(&h->u.udp, rf->how);
+			break;
+		case REQ_FLAGS_UDP_TTL:
+			uv_udp_set_ttl(&h->u.udp, rf->how);
+			break;
+		case REQ_FLAGS_UDP_MCAST_TTL:
+			uv_udp_set_multicast_ttl(&h->u.udp, rf->how);
+			break;
+		case REQ_FLAGS_TCP_NODELAY:
+			uv_tcp_nodelay(&h->u.tcp, rf->how);
+			break;
+		case REQ_FLAGS_TCP_KEEPALIVE:
+			uv_tcp_keepalive(&h->u.tcp, rf->how, rf->reserved);
+			break;
+	}
+}
+
+static void __on_poll(uv_poll_t *handle, int status, int event)
+{
+	struct iohandle *io = (struct iohandle *)handle;
+	int nread;
+	int fd;
+
+	if (status != 0) { /* XXX: report error. */
+		return;
+	}
+
+	if (event & UV_READABLE) {
+		uv_fileno(&io->u.handle, &fd);
+		struct xu_io_event *xie = xu_malloc(sizeof *xie + BUFSIZ);
+		nread = __read(fd, xie->data, BUFSIZ);
+		if (nread > 0) {
+			xie->fdesc = io->handle;
+			xie->event = XIE_EVENT_DATA;
+			xie->size = nread;
+			struct xu_actor *ctx = xu_handle_ref(io->owner);
+			if (ctx) {
+				xu_send(ctx, 0, io->owner, (MTYPE_IO | MTYPE_TAG_DONTCOPY), xie, sizeof xie + nread);
+				xu_actor_unref(ctx);
+			} else {/* actor dead ? */
+				xu_free(xie);
+				__close_handle(io, XIE_ERR_RECV_DATA);
+			}
+		} else { /* XXX: nread < 0 case */
+			xu_free(xie);
+		}
+	}
+}
+
+static void __handle_req_pollfd(struct io_context *ic, struct request *req)
+{
+	struct iohandle *io;
+	
+	io = alloc_iohandle(ic);
+	uv_poll_init(uv_default_loop(), &io->u.fd, req->u.reserved);
+	uv_poll_start(&io->u.fd, UV_READABLE, __on_poll);
+}
+
 static void __handle_req(struct io_context *ic, struct request *req)
 {
 	struct header *hr = &req->header;
@@ -624,28 +766,16 @@ static void __handle_req(struct io_context *ic, struct request *req)
 		case IO_REQ_UOPEN:
 			__handle_req_uopen(ic, req);
 			break;
+		case IO_REQ_MEMBERSHIP:
+			__handle_req_membership(ic, req);
+			break;
+		case IO_REQ_FLAGS:
+			__handle_req_flags(ic, req);
+			break;
+		case IO_REQ_POLLFD:
+			__handle_req_pollfd(ic, req);
+			break;
 	}
-}
-
-static inline int __read(int fd, void *buf, int len)
-{
-	int r;
-
-	do {
-		r = read(fd, buf, len);
-	} while ((r == -1 ) && (errno == EINTR || errno == EAGAIN));
-
-	return (r);
-}
-
-static inline int __write(int fd, void *buf, int len)
-{
-	int r;
-
-	do {
-		r = write(fd, buf, len);
-	} while ((r == -1) && (errno == EINTR || errno == EAGAIN));
-	return (r);
 }
 
 static inline int __send_req(struct request *req, int qtype, uint32_t o, uint32_t h, int reqlen)
@@ -742,9 +872,7 @@ static uint32_t __io_host(uint32_t h, int e, const char *addr, int port, int pro
 	}
 	sr->protocol = proto;
 	sr->port  = port;
-	SPIN_LOCK(_ioc);
-	fdesc = _ioc->handle_index++;
-	SPIN_UNLOCK(_ioc);
+	fdesc = __get_fdesc();
 	__send_req(&req, e, h, fdesc, reqlen);
 	return fdesc;
 }
@@ -807,12 +935,101 @@ uint32_t xu_io_udp_open(uint32_t handle, int udp6)
 
 	ru = &req.u.uopen;
 	ru->udp6 = udp6;
-	SPIN_LOCK(_ioc);
-	fdesc = _ioc->handle_index++;
-	SPIN_UNLOCK(_ioc);
+	fdesc = __get_fdesc();
 	__send_req(&req, IO_REQ_UOPEN, handle, fdesc, sizeof *ru);
 
 	return fdesc;
+}
+
+uint32_t xu_io_fd_open(uint32_t handle, int fd)
+{
+	struct request req;
+	uint32_t h;
+
+	h = __get_fdesc();
+	req.u.reserved = fd;
+	__send_req(&req, IO_REQ_POLLFD, handle, h, sizeof req.u.reserved);
+
+	return h;
+}
+
+int xu_io_udp_membership(uint32_t handle, uint32_t fdesc, const char *mcast, const char *iaddr, int join)
+{
+	struct request req;
+	struct req_membership *rm = &req.u.membership;
+
+	rm->mlen = xu_strlcpy(rm->maddr, mcast, sizeof rm->maddr);
+	rm->ilen = xu_strlcpy(rm->iaddr, iaddr, sizeof rm->iaddr);
+	rm->join = join;
+
+	return __send_req(&req, IO_REQ_MEMBERSHIP, handle, fdesc, sizeof *rm) != sizeof *rm;
+}
+
+int xu_io_udp_set_multicast_loop(uint32_t handle, uint32_t fdesc, int on)
+{
+	struct request req;
+	struct req_flags *rf = &req.u.flags;
+
+	rf->flag = REQ_FLAGS_MCAST_LOOP;
+	rf->how = on;
+
+	return __send_req(&req, IO_REQ_FLAGS, handle, fdesc, sizeof *rf) != sizeof *rf;
+}
+
+int xu_io_udp_set_broadcast(uint32_t handle, uint32_t fdesc, int on)
+{
+	struct request req;
+	struct req_flags *rf = &req.u.flags;
+
+	rf->flag = REQ_FLAGS_BROADCAST;
+	rf->how = on;
+
+	return __send_req(&req, IO_REQ_FLAGS, handle, fdesc, sizeof *rf) != sizeof *rf;
+}
+
+int xu_io_udp_set_ttl(uint32_t handle, uint32_t fdesc, int on)
+{
+	struct request req;
+	struct req_flags *rf = &req.u.flags;
+
+	rf->flag = REQ_FLAGS_UDP_TTL;
+	rf->how = on;
+
+	return __send_req(&req, IO_REQ_FLAGS, handle, fdesc, sizeof *rf) != sizeof *rf;
+}
+
+int xu_io_udp_set_multicast_ttl(uint32_t handle, uint32_t fdesc, int on)
+{
+	struct request req;
+	struct req_flags *rf = &req.u.flags;
+
+	rf->flag = REQ_FLAGS_UDP_MCAST_TTL;
+	rf->how = on;
+
+	return __send_req(&req, IO_REQ_FLAGS, handle, fdesc, sizeof *rf) != sizeof *rf;
+}
+
+int xu_io_tcp_nodelay(uint32_t handle, uint32_t fdesc, int on)
+{
+	struct request req;
+	struct req_flags *rf = &req.u.flags;
+
+	rf->flag = REQ_FLAGS_TCP_NODELAY;
+	rf->how = on;
+
+	return __send_req(&req, IO_REQ_FLAGS, handle, fdesc, sizeof *rf) != sizeof *rf;
+}
+
+int xu_io_tcp_keepalive(uint32_t handle, uint32_t fdesc, int enable, int delay)
+{
+	struct request req;
+	struct req_flags *rf = &req.u.flags;
+
+	rf->flag = REQ_FLAGS_TCP_KEEPALIVE;
+	rf->how = enable;
+	rf->reserved = delay;
+
+	return __send_req(&req, IO_REQ_FLAGS, handle, fdesc, sizeof *rf) != sizeof *rf;
 }
 
 int xu_io_close(uint32_t handle, uint32_t fdesc)
@@ -823,3 +1040,4 @@ int xu_io_close(uint32_t handle, uint32_t fdesc)
 
 	return 0;
 }
+

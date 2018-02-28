@@ -718,6 +718,67 @@ static int lkill(lua_State *L)
 	return 0;
 }
 
+static int __membership(lua_State *L, int join)
+{
+	struct xu_actor *ctx = lua_touserdata(L, lua_upvalueindex(1));
+	uint32_t fdesc;
+	const char *maddr, *iaddr;
+
+	fdesc = luaL_checkinteger(L, 1);
+	maddr = luaL_checkstring(L, 2);
+	iaddr = luaL_checkstring(L, 3);
+	xu_io_udp_membership(xu_actor_handle(ctx), fdesc, maddr, iaddr, join);
+	return 0;
+}
+
+static int laddmembership(lua_State *L)
+{
+	return __membership(L, 1);
+}
+
+static int ldropmembership(lua_State *L)
+{
+	return __membership(L, 0);
+}
+
+static int lmulticastloop(lua_State *L)
+{
+	struct xu_actor *ctx = lua_touserdata(L, lua_upvalueindex(1));
+	uint32_t fdesc;
+	int on;
+
+	fdesc = luaL_checkinteger(L, 1);
+	on = lua_toboolean(L, 2);
+	xu_io_udp_set_multicast_loop(xu_actor_handle(ctx), fdesc, on);
+	return 0;
+}
+
+static int lbroadcast(lua_State *L)
+{
+	struct xu_actor *ctx = lua_touserdata(L, lua_upvalueindex(1));
+	uint32_t fdesc;
+	int on;
+
+	fdesc = luaL_checkinteger(L, 1);
+	on = lua_toboolean(L, 2);
+	xu_io_udp_set_broadcast(xu_actor_handle(ctx), fdesc, on);
+	return 0;
+}
+
+static int lkeepalive(lua_State *L)
+{
+	struct xu_actor *ctx = lua_touserdata(L, lua_upvalueindex(1));
+	uint32_t fdesc;
+	int on;
+	int delay;
+
+	fdesc = luaL_checkinteger(L, 1);
+	on = lua_toboolean(L, 2);
+	delay = luaL_checkinteger(L, 3);
+	xu_io_tcp_keepalive(xu_actor_handle(ctx), fdesc, on, delay);
+	return 0;
+}
+
 static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, void *msg, size_t sz)
 {
 	struct xulua *l = ud;
@@ -744,6 +805,11 @@ static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, vo
 		{"write", lwrite},
 		{"udpOpen", ludpopen},
 		{"udpSend", ludpsend},
+		{"addMembership", laddmembership},
+		{"dropMembership", ldropmembership},
+		{"setMulticastLoopback", lmulticastloop},
+		{"setBroadcast", lbroadcast},
+		{"setKeepalive", lkeepalive},
 		{"udpPeer", ludppeer},
 		{"address", ludpaddress},
 		{NULL, NULL}
