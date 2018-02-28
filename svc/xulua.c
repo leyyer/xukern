@@ -790,7 +790,7 @@ static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, vo
 		{"name",     lsetname},
 		{"query",    lquery},
 		{"timeout",  ltimeout},
-		{"send",     lsend},
+		{"dispatch",     lsend},
 		{"launch",   llaunch},
 		{"exit",     lexit},
 		{"kill",     lkill},

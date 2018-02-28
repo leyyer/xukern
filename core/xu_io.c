@@ -286,8 +286,10 @@ static void __on_tcp_read(uv_stream_t *stream, int nread, const uv_buf_t *buf)
 
 	if (nread == UV_EOF) {
 		int fd;
+		struct xu_actor *ctx;
 		uv_fileno(&tcp->u.handle, &fd);
-		xu_error(NULL, "fdesc %d eof handle %u.", fd, tcp->handle);
+		ctx = xu_handle_ref(tcp->owner);
+		xu_error(ctx, "fdesc %u eof real fd  %d.", tcp->handle, fd);
 		/*
 		 * report close event.
 		 */
