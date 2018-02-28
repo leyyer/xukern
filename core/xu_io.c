@@ -35,13 +35,13 @@ struct req_host {
 
 struct req_write {
 	size_t         len;
-	const void    *data;
+	void    *data;
 };
 
 struct req_usend {
 	union sockaddr_all addr;
 	size_t     len;
-	const void *data;
+	void      *data;
 };
 
 struct req_uopen {
@@ -52,8 +52,8 @@ struct req_membership {
 	int mlen;
 	int ilen;
 	int join;
-	char maddr[108];
-	char iaddr[108];
+	char maddr[128];
+	char iaddr[128];
 };
 
 #define REQ_FLAGS_MCAST_LOOP     1
@@ -79,7 +79,7 @@ struct header {
 struct request {
 	struct header header;
 	union {
-		char buffer[256];
+		char buffer[512];
 		int  reserved;
 		struct req_host host;
 		struct req_write  write;
@@ -610,9 +610,12 @@ static void __handle_req_write(struct io_context *ic, struct request *req)
 
 	if (h && h->flag == IO_HF_CONNECTED) {
 		uv_buf_t buf;
+		if (wr->len <= sizeof req->u - sizeof *wr) {
+			wr->data = req->u.buffer + sizeof *wr;
+		}
 		uwr = xu_malloc(sizeof *uwr);
 		uwr->data = h;
-		buf.base = (void *)wr->data;
+		buf.base = wr->data;
 		buf.len = wr->len;
 		if (uv_write(uwr, &h->u.stream, &buf, 1, __on_write)) {
 			/*
@@ -621,7 +624,8 @@ static void __handle_req_write(struct io_context *ic, struct request *req)
 			xu_free(uwr);
 		}
 	}
-	xu_free((void *)wr->data);
+	if (wr->len > (sizeof req->u - sizeof *wr)) /* malloced */
+		xu_free((void *)wr->data);
 }
 
 static void __on_send(uv_udp_send_t *uwr, int status)
@@ -642,9 +646,12 @@ static void __handle_req_usend(struct io_context *ic, struct request *req)
 	//printf("usend_req: %p, owner: %u, fdesc: %u\n", h, req->header.owner, req->header.fdesc);
 	if (h) {
 		uv_buf_t buf;
+		if (wr->len <= sizeof req->u.buffer - sizeof *wr) {
+			wr->data = req->u.buffer + sizeof *wr;
+		}
 		uwr = xu_malloc(sizeof *uwr);
 		uwr->data = h;
-		buf.base = (void *)wr->data;
+		buf.base = wr->data;
 		buf.len = wr->len;
 		if (uv_udp_send(uwr, &h->u.udp, &buf, 1, &wr->addr.in, __on_send)) {
 			/*
@@ -653,7 +660,9 @@ static void __handle_req_usend(struct io_context *ic, struct request *req)
 			xu_free(uwr);
 		}
 	}
-	xu_free((void *)wr->data);
+	if (wr->len > sizeof req->u.buffer - sizeof *wr) {
+		xu_free(wr->data);
+	}
 }
 
 static void __handle_req_close(struct io_context *ic, struct request *req)
@@ -898,6 +907,7 @@ int xu_io_write(uint32_t handle, uint32_t fdesc, const void *data, int len)
 {
 	struct request req;
 	struct req_write *wr;
+	size_t reqlen = sizeof *wr;
 
 	if (len <= 0) {
 		return -1;
@@ -905,7 +915,14 @@ int xu_io_write(uint32_t handle, uint32_t fdesc, const void *data, int len)
 
 	wr = &req.u.write;
 	wr->len   = len;
-	wr->data  = data;
+	if (len <= (sizeof req.u - sizeof *wr)) {
+		wr->data = req.u.buffer + sizeof *wr;
+		memcpy(wr->data, data, len);
+		reqlen += len;
+	} else {
+		wr->data = xu_malloc(len);
+		memcpy(wr->data, data, len);
+	}
 #if 0
 	{
 		struct xu_actor *ctx = xu_handle_ref(handle);
@@ -913,20 +930,28 @@ int xu_io_write(uint32_t handle, uint32_t fdesc, const void *data, int len)
 		xu_actor_unref(ctx);
 	}
 #endif
-	return __send_req(&req, IO_REQ_WRITE, handle, fdesc, sizeof *wr) != sizeof *wr;
+	return __send_req(&req, IO_REQ_WRITE, handle, fdesc, reqlen) != reqlen;
 }
 
 int xu_io_udp_send(uint32_t handle, uint32_t fdesc, union sockaddr_all *addr, const void *data, int len)
 {
 	struct request   req;
 	struct req_usend *ur;
+	int reqlen =  sizeof *ur;
 
 	ur = &req.u.usend;
 	ur->addr = *addr;
 	ur->len = len;
-	ur->data = data;
+	if (len <= sizeof req.u - reqlen) {
+		ur->data = req.u.buffer + reqlen;
+		memcpy(ur->data, data, len);
+		reqlen += len;
+	} else {
+		ur->data = xu_malloc(len);
+		memcpy(ur->data, data, len);
+	}
 
-	return __send_req(&req, IO_REQ_UDPSEND, handle, fdesc, sizeof *ur) != sizeof *ur;
+	return __send_req(&req, IO_REQ_UDPSEND, handle, fdesc, reqlen) != reqlen;
 }
 
 uint32_t xu_io_udp_open(uint32_t handle, int udp6)
