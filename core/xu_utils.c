@@ -54,3 +54,11 @@ void xu_nonblock(int fd)
 	fcntl(fd, F_SETFD, flags);
 }
 
+#define ARM 1
+#ifdef ARM
+int pthread_atfork(void (*p)(void), void (*after)(void))
+{
+	return 0;
+}
+#endif
+

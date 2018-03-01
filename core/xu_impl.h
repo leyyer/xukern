@@ -13,11 +13,6 @@
 #include "xu_malloc.h"
 #include "xu_util.h"
 
-#define SPIN_INIT(x)    spinlock_init(&(x)->lock)
-#define SPIN_LOCK(x)    spinlock_lock(&(x)->lock)
-#define SPIN_UNLOCK(x)  spinlock_unlock(&(x)->lock)
-#define SPIN_RELEASE(x) spinlock_destroy(&(x)->lock)
-
 void xu_timer_init(void);
 void xu_kern_global_init(const char *mod_path);
 void xu_io_init(void);

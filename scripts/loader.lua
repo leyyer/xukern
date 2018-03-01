@@ -34,5 +34,5 @@ end
 
 actor.name(args[1])
 
-f(select(2, unpack(args)))
+f(select(2, table.unpack(args)))
 

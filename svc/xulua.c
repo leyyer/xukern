@@ -8,7 +8,7 @@
 #include "xu_io.h"
 #include "lauxlib.h"
 #include "lualib.h"
-#include "luajit.h"
+#include "lua.h"
 #include "uv.h"
 
 struct xulua {
@@ -81,13 +81,14 @@ static void create_metatable(lua_State *L, const char *name, luaL_Reg reg[])
 	lua_pushstring(L, "__index");
 	lua_pushvalue(L, -2);
 	lua_settable(L, -3);
-	luaL_openlib(L, NULL, reg, 0);
+	luaL_setfuncs(L, reg, 0);
+	//luaL_openlib(L, NULL, reg, 0);
 	lua_pop(L, 1);
 }
 
 static void __sock_addr_mt(lua_State *L)
 {
-	static luaL_Reg sa[] = {
+	luaL_Reg sa[] = {
 		{"family",  __sock_addr_fmaily},
 		{"address", __sock_address},
 		{"port",  __sock_port},
@@ -168,7 +169,7 @@ static int __xie_get_data(lua_State *L)
 
 static void __xio_event(lua_State *L)
 {
-	static luaL_reg xe[] = {
+	luaL_Reg xe[] = {
 		{"event", __xie_get_event},
 		{"fd", __xie_get_fd},
 		{"len", __xie_get_len},
@@ -179,6 +180,7 @@ static void __xio_event(lua_State *L)
 		{"free", __xie_free},
 		{NULL, NULL}
 	};
+//	luaL_newlib(L, xe);
 	luaL_openlib(L, "ioevent", xe, 0);
 	lua_pop(L, 1);
 }
@@ -245,7 +247,7 @@ static int __buf_read32(lua_State *L)
 
 static void __xio_buffer(lua_State *L)
 {
-	static luaL_reg xb[] = {
+	luaL_Reg xb[] = {
 		{"readu8", __buf_read_u8},
 		{"read8", __buf_read8},
 		{"readu16", __buf_read_u16},
@@ -254,6 +256,7 @@ static void __xio_buffer(lua_State *L)
 		{"read32", __buf_read32},
 		{NULL, NULL}
 	};
+//	luaL_newlib(L, xb);
 	luaL_openlib(L, "rdbuf", xb, 0);
 	lua_pop(L, 1);
 }
@@ -296,7 +299,7 @@ static int __cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, void *m
 /*	xu_error(ctx, "callback running: %d, top = %d", mtype, top); */
 	if (top == 0) {
 		lua_pushcfunction(L, traceback);
-		lua_rawgeti(L, LUA_REGISTRYINDEX, (int)__cb);
+		lua_rawgetp(L, LUA_REGISTRYINDEX, __cb);
 	} else {
 		assert(top == 2);
 	}
@@ -307,15 +310,15 @@ static int __cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, void *m
 	lua_pushlightuserdata(L, (void *)msg);
 	lua_pushinteger(L, sz);
 
-	int r = lua_pcall(L, 4, 1, 1);
+	int r = lua_pcall(L, 4, 0, 1);
+
 	if (r == 0) {
-		r = luaL_checkinteger(L, -1);
+		return 0;
 	} else {
-		r = 0;
 		xu_error(ctx, "lua error: %s", lua_tostring(L, -1));
 	}
 	lua_pop(L, 1);
-	return r;
+	return 0;
 }
 
 static int lcallback(lua_State *L)
@@ -324,9 +327,12 @@ static int lcallback(lua_State *L)
 
 	luaL_checktype(L, 1, LUA_TFUNCTION);
 	lua_settop(L, 1);
-	lua_rawseti(L, LUA_REGISTRYINDEX, (int)__cb);
-	xu_actor_callback(ctx, L, __cb);
-//	xu_error(ctx, "callback :%p", __cb);
+	lua_rawsetp(L, LUA_REGISTRYINDEX, __cb);
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD);
+	lua_State *_L = lua_tothread(L, -1);
+
+	xu_actor_callback(ctx, _L, __cb);
 
 	return 0;
 }
@@ -400,7 +406,7 @@ static int lsend(lua_State *L)
 	void *msg;
 	size_t len = 0;
 
-	if ((dst = (uint32_t)lua_tointeger(L, 1)) == 0) {
+	if ((dst = luaL_checkinteger(L, 1)) == 0) {
 		if (lua_type(L, 1) == LUA_TNUMBER) {
 			return luaL_error(L, "Invalid dest address 0");
 		}
@@ -785,7 +791,7 @@ static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, vo
 	lua_State *L = l->L;
 	const char *loader;
 	int r;
-	static luaL_reg funcs[] = {
+	luaL_Reg funcs[] = {
 		{"callback", lcallback},
 		{"name",     lsetname},
 		{"query",    lquery},
@@ -816,7 +822,7 @@ static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, vo
 	};
 
 	lua_gc(L, LUA_GCSTOP, 0);
-//	xu_error(ctx, "__init_cb: %s", (char *)msg);
+/*	xu_error(ctx, "__init_cb: %s", (char *)msg); */
 	xu_actor_callback(ctx, NULL, NULL);
 
 	lua_pushlightuserdata(L, ctx);
@@ -824,6 +830,7 @@ static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, vo
 
 	lua_pushlightuserdata(L, ctx);
 	luaL_openlib(L, "actor", funcs, 1);
+
 	lua_pop(L, 1);
 
 	__sock_addr_mt(L);

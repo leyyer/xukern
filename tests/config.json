@@ -3,6 +3,6 @@
 		"threads" : "8",
 		"mod_path" : "./svc",
 		"logger" : "logger",
-		"bootstrap" : "xulua tcpecho"
+		"bootstrap" : "xulua co"
 	}
 }

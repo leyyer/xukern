@@ -4,11 +4,14 @@ CROSS_COMPILE ?= i586-linux-gnu
 CC := $(CROSS_COMPILE)-gcc
 AR := $(CROSS_COMPILE)-ar
 LD := $(CROSS_COMPILE)-ld
+RUNLIB := $(CROSS_COMPILE)-runlib
+
 STRIP := $(CROSS_COMPILE)-strip
 
 TOP := $(shell pwd)
 
 LUAJIT_DIR := $(TOP)/3rd/luajit
+LUA_DIR    := $(TOP)/3rd/lua
 CJSON_DIR  := $(TOP)/3rd/cJSON
 LIBEV_DIR  := $(TOP)/3rd/libev/src
 LIBUV_DIR  := $(TOP)/3rd/libuv
@@ -20,12 +23,12 @@ LINKLIBS := -ldl -lpthread -lm
 #DEBUG_FLAG := -O2
 DEBUG_FLAG := -O0 -g -ggdb
 
-LINK_ARCHIVES := -Wl,-whole-archive -lcjson -luv -ljemalloc_pic -lluajit-5.1 -Wl,-no-whole-archive
+LINK_ARCHIVES := -Wl,-whole-archive -lcjson -luv -ljemalloc_pic -llua -Wl,-no-whole-archive
 
 CFLAGS  += -I$(TOP)/include -I$(RD3ROOT)/include -I$(TOP)/core -std=gnu99 -Wall \
 		   $(DEBUG_FLAG) -DUSE_JEMALLOC \
 		   -I$(RD3ROOT)/include/luajit-2.0 -I$(RD3ROOT)/include/cjson -fPIC
-LDFLAGS += -L$(TOP) -L$(RD3ROOT)/lib -Wl,--start-group $(LINKLIBS) -Wl,--end-group
+LDFLAGS += -L$(TOP) -L$(RD3ROOT)/lib -Wl,--start-group $(LINKLIBS) -lrt -lpthread -Wl,--end-group
 
 BTIF_OBJS := btif/slip.o \
 	btif/btif.o \
@@ -56,6 +59,12 @@ btif/btif.so : $(BTIF_OBJS)
 luajit:
 	$(MAKE) HOST_CC=gcc STATIC_CC=$(CC) PREFIX=/usr CFLAGS='-fPIC -O2' DYNAMIC_CC='$(CC) -fPIC' TARGET_LD=$(CC) TARGET_AR='$(AR) rcs' TARGET_STRIP=$(STRIP) DESTDIR=$(TOP) -C $(LUAJIT_DIR) install clean
 
+lua:
+	$(MAKE) CC="$(CC) -fPIC -std=gnu99" AR="$(AR) rcs" RUNLIB=$(RUNLIB) -C $(LUA_DIR) liblua.a
+	cp -f $(LUA_DIR)/lua.h $(LUA_DIR)/luaconf.h $(LUA_DIR)/lualib.h $(LUA_DIR)/lauxlib.h $(LUA_DIR)/lua.hpp $(RD3ROOT)/include
+	cp -f $(LUA_DIR)/liblua.a $(RD3ROOT)/lib/
+	$(MAKE) -C $(LUA_DIR) clean
+
 cJSON:
 	(cd $(CJSON_DIR) && git checkout -f && sed -i 's/gcc/arm-linux-gcc/g' $(CJSON_DIR)/Makefile)
 	$(MAKE) CC=$(CC) AR=$(AR) LD=$(LD)  PREFIX=$(RD3ROOT) -C $(CJSON_DIR) static shared install
@@ -76,10 +85,10 @@ libuv:
 jemalloc:
 	@(cd $(JEMALLOC_DIR); [ -f configure ] || sh autogen.sh)
 	(cd $(JEMALLOC_DIR) && ./configure --prefix=$(RD3ROOT) --host=$(CROSS_COMPILE) --disable-shared --with-jemalloc-prefix=je_)
-	$(MAKE) -C $(JEMALLOC_DIR) install distclean
+	$(MAKE) -C $(JEMALLOC_DIR) install_lib_static install_include distclean
 	@rm -rf $(RD3ROOT)/lib/*.la
 
-dependence: cJSON luajit libuv
+dependence: cJSON lua libuv jemalloc
 	@rm -rf $(RD3ROOT)/lib/*.so
 	@rm -rf $(RD3ROOT)/lib/*.la
 	@rm -rf $(RD3ROOT)/lib/*.so.*
