@@ -25,9 +25,10 @@ DEBUG_FLAG := -O0 -g -ggdb
 
 LINK_ARCHIVES := -Wl,-whole-archive -lcjson -luv -ljemalloc_pic -llua -Wl,-no-whole-archive
 
+LUA_CFLAGS += -DLUA_COMPAT_MODULE 
+
 CFLAGS  += -I$(TOP)/include -I$(RD3ROOT)/include -I$(TOP)/core -std=gnu99 -Wall \
-		   $(DEBUG_FLAG) -DUSE_JEMALLOC \
-		   -I$(RD3ROOT)/include/luajit-2.0 -I$(RD3ROOT)/include/cjson -fPIC
+		   $(DEBUG_FLAG) -DUSE_JEMALLOC $(LUA_CFLAGS) -I$(RD3ROOT)/include/cjson -fPIC
 LDFLAGS += -L$(TOP) -L$(RD3ROOT)/lib -Wl,--start-group $(LINKLIBS) -lrt -lpthread -Wl,--end-group
 
 BTIF_OBJS := btif/slip.o \
@@ -106,7 +107,7 @@ demo: tests/xc.o libxukern.so
 kern: tests/kern.o libxukern.so
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -Wl,-rpath,. -static-libgcc
 
-extra:
+extra: btif
 	$(MAKE) CC=$(CC) CFLAGS="$(CFLAGS)" -C $(TOP)/svc
 
 clean:

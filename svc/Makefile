@@ -14,4 +14,4 @@ console.so : console.c
 echo.so : echo.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared $^ -o $@ 
 xulua.so : xulua.c
-	$(CC) $(CFLAGS) -DLUA_COMPAT_MODULE $(LDFLAGS) -fPIC -shared $^ -o $@ 
+	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared $^ -o $@ 

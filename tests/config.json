@@ -2,6 +2,7 @@
 	"environ": {
 		"threads" : "8",
 		"mod_path" : "./svc",
+		"lua_cpath" : "./btif/?.so",
 		"logger" : "logger",
 		"bootstrap" : "xulua tcpecho"
 	}

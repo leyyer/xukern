@@ -66,3 +66,5 @@ end
 
 actor.callback(dispatch)
 actor.error("threads: " .. os.getenv("UV_THREADPOOL_SIZE"))
+require("btif")
+a = btif.open("/dev/ttyS1")

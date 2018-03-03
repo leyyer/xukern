@@ -484,6 +484,28 @@ struct xu_actor *xu_actor_new(const char *name, const char *p)
 	}
 }
 
+void xu_actors_foreach(void *ud, int (*f)(void *ud, struct xu_actor *))
+{
+	struct xu_actor *ctx;
+	int i = 0, n;
+
+	rwlock_rlock(&_am->lock);
+	n = _am->slot_size;
+	while (i < n) {
+		ctx = _am->slot[i];
+		if (ctx) {
+			ATOM_INC(&ctx->ref);
+			rwlock_runlock(&_am->lock);
+			f(ud, ctx);
+			xu_actor_unref(ctx);
+			rwlock_rlock(&_am->lock);
+			n = _am->slot_size;
+		}
+		++i;
+	}
+	rwlock_runlock(&_am->lock);
+}
+
 struct xu_actor *xu_handle_ref(uint32_t handle)
 {
 	struct xu_actor *rest = NULL, *ctx;

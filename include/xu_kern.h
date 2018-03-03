@@ -58,6 +58,11 @@ uint32_t xu_actor_handle(struct xu_actor *);
 
 int xu_actor_name(struct xu_actor *ctx, char *buf, int len);
 
+/*
+ * Iterate for each actors.
+ */
+void xu_actors_foreach(void *ud, int (*f)(void *ud, struct xu_actor *));
+
 void xu_error(struct xu_actor * context, const char *msg, ...);
 
 /*
