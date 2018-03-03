@@ -1,6 +1,6 @@
 MODS := logger.so  echo.so xulua.so
 
-LDFLAGS += -L../ -lxucore
+LDFLAGS += -L../ -lxukern
 
 all: $(MODS)
 

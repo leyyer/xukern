@@ -7,8 +7,10 @@ extern "C"
 #include <stddef.h>
 #include <stdint.h>
 
-#define MESSAGE_TYPE_MASK (SIZE_MAX >> 8)
-#define MESSAGE_TYPE_SHIFT ((sizeof (size_t) - 1) * 8)
+//#define MESSAGE_TYPE_MASK (SIZE_MAX >> 8)
+//#define MESSAGE_TYPE_SHIFT ((sizeof (size_t) - 1) * 8)
+
+#define MESSAGE_TYPE_MASK  0x0ffff
 
 #define MTYPE_TAG_DONTCOPY 0x10000
 #define MTYPE_TAG_DASINT   0x20000
@@ -21,8 +23,9 @@ extern "C"
 
 struct xu_msg {
 	uint32_t    source;
+	int         type;
+	size_t      size; /* type | size */
 	const void *data;
-	size_t      sz; /* type | size */
 };
 
 #define container_of(ptr, type, member) ({              \

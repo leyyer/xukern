@@ -128,14 +128,14 @@ static inline void dispatch_list(struct timer_node *tn)
 {
 	struct timer_event *te;
 	struct timer_node *tr;
-	struct xu_msg tmsg;
 
 	do {
 		te = (struct timer_event *)(tn + 1);
-		tmsg.source = 0;
-		tmsg.data = (void *)(te->session);
-		tmsg.sz = (size_t)(MTYPE_TIMEOUT << MESSAGE_TYPE_SHIFT);
-		xu_handle_msgput(te->handle, &tmsg);
+		struct xu_actor *ctx = xu_handle_ref(te->handle);
+		if (ctx) {
+			xu_send(ctx, 0, te->handle, MTYPE_TIMEOUT | MTYPE_TAG_DONTCOPY, (void *)te->session, 0);
+			xu_actor_unref(ctx);
+		}
 		tr = tn;
 		tn = tn->next;
 		xu_free(tr);
@@ -240,14 +240,10 @@ void xu_updatetime(void)
 int xu_timeout(uint32_t handle, int time, int session)
 {
 	if (time <= 0) {
-		struct xu_msg msg;
-
-		msg.source = 0;
-		msg.data = (void *) session;
-		msg.sz = (size_t)((MTYPE_TIMEOUT) << MESSAGE_TYPE_SHIFT);
-
-		if (xu_handle_msgput(handle, &msg)) {
-			return -1;
+		struct xu_actor *ctx = xu_handle_ref(handle);
+		if (ctx) {
+			xu_send(ctx, 0, handle, MTYPE_TIMEOUT | MTYPE_TAG_DONTCOPY | MTYPE_TAG_DASINT, (void *)session, 0);
+			xu_actor_unref(ctx);
 		}
 	} else {
 		struct timer_event evt;

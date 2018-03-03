@@ -45,16 +45,16 @@ OBJS += core/xu_utils.o \
 
 OBJS += $(LUA_OBJS)
 
-all: libxucore.so kern
+all: libxukern.so kern
 
-libxucore.so : $(OBJS)
+libxukern.so : $(OBJS)
 	$(CC) -shared $(LDFLAGS) $(LINK_ARCHIVES) -o $@ $^
 
-btif : libxucore.so btif/btif.so
+btif : libxukern.so btif/btif.so
 	@echo "ok"
 
 btif/btif.so : $(BTIF_OBJS) 
-	$(CC) -shared $(LDFLAGS) -Wl,--rpath,. -L. -lxucore -o $@ $^
+	$(CC) -shared $(LDFLAGS) -Wl,--rpath,. -L. -lxukern -o $@ $^
 
 luajit:
 	$(MAKE) HOST_CC=gcc STATIC_CC=$(CC) PREFIX=/usr CFLAGS='-fPIC -O2' DYNAMIC_CC='$(CC) -fPIC' TARGET_LD=$(CC) TARGET_AR='$(AR) rcs' TARGET_STRIP=$(STRIP) DESTDIR=$(TOP) -C $(LUAJIT_DIR) install clean
@@ -100,10 +100,10 @@ luaclib : luaclib/cjson.so
 luaclib/cjson.so: luaclib/cjson.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared $^ -o $@ 
 
-demo: tests/xc.o libxucore.so
+demo: tests/xc.o libxukern.so
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -Wl,-rpath,. -static-libgcc
 
-kern: tests/kern.o libxucore.so
+kern: tests/kern.o libxukern.so
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -Wl,-rpath,. -static-libgcc
 
 extra:

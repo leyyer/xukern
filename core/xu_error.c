@@ -57,7 +57,8 @@ void xu_error(struct xu_actor * context, const char *msg, ...)
 		smsg.source = xu_actor_handle(context);
 	}
 	smsg.data = data;
-	smsg.sz = len | ((size_t)MTYPE_LOG << MESSAGE_TYPE_SHIFT);
+	smsg.type = MTYPE_LOG;
+	smsg.size = len;
 	xu_handle_msgput(logger, &smsg);
 }
 
@@ -66,7 +67,7 @@ FILE *xu_log_open(struct xu_actor *ctx, uint32_t handle)
 	const char * logpath = xu_getenv("logpath", NULL, 0);
 
 	if (logpath == NULL) {
-		return NULL;
+		logpath = ".";
 	}
 	size_t sz = strlen(logpath);
 	char tmp[sz + 16];

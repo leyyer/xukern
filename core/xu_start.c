@@ -108,12 +108,14 @@ void xu_kern_init(int argc, char *argv[])
 		xu_free
 	};
 	const char *s, *mod_path;
+	extern void luaS_initshr();
 
 	signal(SIGPIPE, SIG_IGN);
 
 	cJSON_InitHooks(&hook);
 	uv_replace_allocator(__malloc, xu_realloc, xu_calloc, xu_free);
 	xu_envinit();
+	luaS_initshr();
 
 	parsing(argc, argv);
 
@@ -236,5 +238,11 @@ void xu_kern_start()
 
 	xu_error(NULL, "running");
 	uv_run(loop, UV_RUN_DEFAULT);
+}
+
+void xu_kern_exit()
+{
+	extern void luaS_exitshr();
+	luaS_exitshr();
 }
 

@@ -7,7 +7,7 @@ function process(fd, s)
 	print("command line: ")
 	-- remove '\b'
 	if s == "query" then
-		actor.write(fd, actor.query() .. "\r\n")
+		sio.write(fd, actor.query() .. "\r\n")
 	end
 	print("------------------------")
 end
@@ -19,7 +19,7 @@ function handle_io(msg, sz)
 	if event == 4 then
 		local fd = ioevent.fd(msg)
 		clients[fd] = {}
-		actor.write(fd, "\xFF\xFB\x03\xFF\xFB\x01\xFF\xFD\x03\xFF\xFD\x01> ")
+		sio.write(fd, "\xFF\xFB\x03\xFF\xFB\x01\xFF\xFD\x03\xFF\xFD\x01> ")
 	end
 	if event == 6 then
 		local ud = ioevent.data(msg)
@@ -45,7 +45,7 @@ function handle_io(msg, sz)
 			end
 		end
 		local sd = table.concat(r)
-		actor.write(fd, sd);
+		sio.write(fd, sd);
 --		actor.error(s)
 --		print(table.concat(data))
 	end

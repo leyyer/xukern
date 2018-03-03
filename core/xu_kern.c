@@ -383,7 +383,7 @@ static void __drop_q(struct queue *q)
 	struct xu_msg msg;
 
 	while (!xu_queue_get(q, &msg)) {
-		if ((msg.sz & MESSAGE_TYPE_MASK) > 0)
+		if (msg.size > 0)
 			xu_free((void *)msg.data);
 	}
 	SPIN_RELEASE(q);
@@ -503,14 +503,12 @@ struct xu_actor *xu_handle_ref(uint32_t handle)
 static void dispatch_message(struct xu_actor *ctx, struct xu_msg *msg)
 {
 	int rmsg;
-	int type = msg->sz >> MESSAGE_TYPE_SHIFT;
-	size_t sz = msg->sz & MESSAGE_TYPE_MASK;
 
 	if (ctx->logfile)
-		xu_log_output(ctx->logfile, msg->source, type, msg->data, sz);
-
-	rmsg = ctx->cb(ctx, ctx->data, type, msg->source, (void *)msg->data, sz);
-	if (!rmsg && (sz > 0)) {
+		xu_log_output(ctx->logfile, msg->source, msg->type, msg->data, msg->size);
+	//fprintf(stderr, "type = %d, src = %d, len = %d\n", msg->type, msg->source, msg->size);
+	rmsg = ctx->cb(ctx, ctx->data, msg->type, msg->source, (void *)msg->data, msg->size);
+	if (!rmsg && msg->size > 0) {
 		xu_free((void *)msg->data);
 	}
 }
@@ -543,7 +541,7 @@ struct queue *xu_dispatch_message(struct queue *q, int weight)
 		}
 
 		if (ctx->cb == NULL) {
-			if ((msg.sz & MESSAGE_TYPE_MASK) > 0)
+			if (msg.size > 0)
 				xu_free((void *)msg.data);
 		} else {
 			dispatch_message(ctx, &msg);
@@ -626,7 +624,6 @@ static void __filter_args(struct xu_actor *ctx, int type, void **data, size_t *s
 		memcpy(msg, *data, *sz);
 		*data = msg;
 	}
-	*sz |= (size_t)type << MESSAGE_TYPE_SHIFT;
 }
 
 int xu_send(struct xu_actor *ctx, uint32_t src, uint32_t dest, int type, void *msg, size_t sz)
@@ -660,7 +657,8 @@ int xu_send(struct xu_actor *ctx, uint32_t src, uint32_t dest, int type, void *m
 
 	smsg.source = src;
 	smsg.data = msg;
-	smsg.sz = sz;
+	smsg.type = type & MESSAGE_TYPE_MASK;
+	smsg.size = sz;
 
 	xu_queue_put(dctx->q, &smsg);
 	xu_actor_unref(dctx);
