@@ -1,5 +1,5 @@
 actor.name("tcp")
-server = actor.createTcpServer("0.0.0.0", 61000)
+server = sio.createTcpServer("0.0.0.0", 61000)
 
 local clients = {}
 

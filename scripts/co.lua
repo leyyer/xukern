@@ -1,5 +1,5 @@
 actor.name("co")
-server = actor.createTcpServer("0.0.0.0", 61000)
+server = sio.createTcpServer("0.0.0.0", 61000)
 
 function handle_io(msg, sz)
 	return 0

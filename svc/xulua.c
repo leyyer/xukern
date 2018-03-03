@@ -804,6 +804,9 @@ static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, vo
 		{"setenv",   lsetenv},
 		{"now",      lnow},
 		{"error",    lerror},
+		{NULL, NULL}
+	};
+	luaL_Reg ios[] = {
 		{"createTcpServer", ltcpserver},
 		{"createUdpServer", ludpserver},
 		{"close", lclose},
@@ -829,8 +832,10 @@ static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, vo
 	lua_setfield(L, LUA_REGISTRYINDEX, "xu_actor");
 
 	lua_pushlightuserdata(L, ctx);
+	lua_pushvalue(L, -1);
 	luaL_openlib(L, "actor", funcs, 1);
-
+	lua_pop(L, 1); /* pop table on top */
+	luaL_openlib(L, "sio", ios, 1);
 	lua_pop(L, 1);
 
 	__sock_addr_mt(L);
@@ -844,7 +849,7 @@ static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, vo
 	r = luaL_loadfile(L, loader);
 	if (r != 0) {
 		xu_error(ctx, "Can't load %s : %s", (char *)msg, lua_tostring(L, -1));
-		lua_pop(L, 1);
+		lua_settop(L, 0);
 		return 0;
 	}
 	lua_pushlstring(L, msg, sz);
@@ -854,7 +859,7 @@ static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, vo
 		lua_pop(L, 1);
 	}
 	lua_pop(L, 1);
-//	xu_error(ctx, "__init_done: %d, top = %d", r, lua_gettop(L));
+	/* xu_error(ctx, "__init_done: %d, top = %d", r, lua_gettop(L)); */
 	lua_gc(L, LUA_GCRESTART, 0);
 	return 0;
 }
