@@ -180,7 +180,6 @@ static void __xio_event(lua_State *L)
 		{"free", __xie_free},
 		{NULL, NULL}
 	};
-//	luaL_newlib(L, xe);
 	luaL_openlib(L, "ioevent", xe, 0);
 	lua_pop(L, 1);
 }
@@ -785,6 +784,28 @@ static int lkeepalive(lua_State *L)
 	return 0;
 }
 
+static int llogon(lua_State *L)
+{
+	const char *file = NULL; 
+	struct xu_actor *ctx = lua_touserdata(L, lua_upvalueindex(1));
+
+	if (lua_gettop(L) >= 1) {
+		file = luaL_checkstring(L, 1);
+	}
+
+	xu_actor_logon(ctx, file);
+
+	return 0;
+}
+
+static int llogoff(lua_State *L)
+{
+	struct xu_actor *ctx = lua_touserdata(L, lua_upvalueindex(1));
+
+	xu_actor_logoff(ctx);
+	return 0;
+}
+
 static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, void *msg, size_t sz)
 {
 	struct xulua *l = ud;
@@ -798,6 +819,8 @@ static int __init_cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, vo
 		{"timeout",  ltimeout},
 		{"dispatch",     lsend},
 		{"launch",   llaunch},
+		{"logon",    llogon},
+		{"logoff",   llogoff},
 		{"exit",     lexit},
 		{"kill",     lkill},
 		{"getenv",   lgetenv},

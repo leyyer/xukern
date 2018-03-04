@@ -18,6 +18,16 @@ struct slip_rdwr;
 typedef struct btif * btif_t;
 
 /*
+ * open dev tty
+ */
+int btif_tty_open(const char *dev);
+
+/*
+ * open sock
+ */
+int btif_sock_open(const char *ifdev);
+
+/*
  * Create BT-U131A object.
  *
  * dev: uart device name, such as: ttymxc1 or /dev/ttymxc1
@@ -27,9 +37,19 @@ typedef struct btif * btif_t;
 btif_t btif_new(const char *dev);
 
 /*
+ * Create BT-U131A object.
+ *
+ * dev: netif device name, such as: sl0
+ *
+ * return: btif object or NULL
+ */
+btif_t btif_sock_new(const char *ifdev);
+
+/*
  * Create a BT-U131A object with reader/writer
  */
-btif_t btif_generic_new(struct slip_rdwr *srd);
+btif_t btif_generic_new(struct slip_rdwr *srd, int noesc);
+
 /* 
  * Close BT-U131A device.
  */

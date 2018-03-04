@@ -25,7 +25,7 @@ struct slip;
 #define SLF_ESCAPE	1               /* ESC received                 */
 #define SLF_ERROR	2               /* Parity, etc. error           */
 
-struct slip * slip_generic_new(struct slip_rdwr *srd, int mtu);
+struct slip * slip_generic_new(struct slip_rdwr *srd, int mtu, int noesc);
 
 /* 
  * create slip object. 
@@ -35,7 +35,7 @@ struct slip * slip_generic_new(struct slip_rdwr *srd, int mtu);
  *
  * return : slip object on sucess, NULL on error.
  */
-struct slip * slip_new(int fd, int mtu);
+struct slip * slip_new(int fd, int mtu, int noesc);
 
 /*
  * free slip object, must not use it afterwards.

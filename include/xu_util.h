@@ -16,17 +16,6 @@ char *xu_strdup(const char *src);
 
 void xu_nonblock(int fd);
 
-/*
- * Debug message output function.
- */
-typedef void (*logger_t)(void *data, const char *, int);
-void xu_set_logger(void *data, logger_t subr);
-int  xu_println(const char *msg, ...);
-/*
- * dump data in buffer to hex digits.
- */
-int  xu_log_blob(void *buf, int len);
-
 #ifdef __cplusplus
 }
 #endif

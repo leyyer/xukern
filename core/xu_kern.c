@@ -442,6 +442,36 @@ struct xu_actor *xu_actor_unref(struct xu_actor *ctx)
 	return ctx;
 }
 
+int xu_actor_logon(struct xu_actor *ctx, const char *p)
+{
+	FILE *f = NULL, *lastf = ctx->logfile;
+
+	if (lastf == NULL) {
+		if (p) {
+			f = fopen(p, "ab");
+		} else {
+			f = xu_log_open(ctx, ctx->handle);
+		}
+		if (f) {
+			if (!ATOM_CAS_POINTER(&ctx->logfile, NULL, f)) {
+				fclose(f);
+			}
+		}
+	}
+	return ctx->logfile == NULL;
+}
+
+void xu_actor_logoff(struct xu_actor *ctx)
+{
+	FILE *f = ctx->logfile;
+
+	if (f) {
+		if (ATOM_CAS_POINTER(&ctx->logfile, f, NULL)) {
+			xu_log_close(ctx, f, ctx->handle);
+		}
+	}
+}
+
 struct xu_actor *xu_actor_new(const char *name, const char *p)
 {
 	struct xu_module *m;

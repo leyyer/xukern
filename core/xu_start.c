@@ -205,7 +205,7 @@ static void on_prepare(uv_prepare_t *p)
 	}
 }
 
-void xu_kern_start()
+static void __kern_prestart()
 {
 	struct worker *w;
 	struct workqueue *wq;
@@ -235,9 +235,21 @@ void xu_kern_start()
 	w->wup.data = w;
 
 	bootstrap();
+}
 
+void xu_kern_start()
+{
+	uv_loop_t *loop = uv_default_loop();
+	__kern_prestart();
 	xu_error(NULL, "running");
 	uv_run(loop, UV_RUN_DEFAULT);
+}
+
+void xu_kern_step()
+{
+	uv_loop_t *loop = uv_default_loop();
+	__kern_prestart();
+	uv_run(loop, UV_RUN_ONCE);
 }
 
 void xu_kern_exit()

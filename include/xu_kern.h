@@ -7,9 +7,6 @@ extern "C"
 #include <stddef.h>
 #include <stdint.h>
 
-//#define MESSAGE_TYPE_MASK (SIZE_MAX >> 8)
-//#define MESSAGE_TYPE_SHIFT ((sizeof (size_t) - 1) * 8)
-
 #define MESSAGE_TYPE_MASK  0x0ffff
 
 #define MTYPE_TAG_DONTCOPY 0x10000
@@ -38,6 +35,13 @@ struct xu_actor;
 void xu_kern_init(int argc, char *argv[]);
 void xu_kern_start(void);
 
+/*
+ * run loop once.
+ */
+void xu_kern_step(void);
+
+void xu_kern_exit(void);
+
 typedef int (*xu_callback_t)(struct xu_actor *, void *ud, int type, uint32_t src, void *msg, size_t sz);
 
 void xu_actor_callback(struct xu_actor *ctx, void *ud, xu_callback_t cb);
@@ -62,6 +66,12 @@ int xu_actor_name(struct xu_actor *ctx, char *buf, int len);
  * Iterate for each actors.
  */
 void xu_actors_foreach(void *ud, int (*f)(void *ud, struct xu_actor *));
+
+/*
+ * Log
+ */
+int xu_actor_logon(struct xu_actor *ctx, const char *p);
+void xu_actor_logoff(struct xu_actor *ctx);
 
 void xu_error(struct xu_actor * context, const char *msg, ...);
 

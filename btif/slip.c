@@ -26,6 +26,8 @@ struct slip {
 	unsigned char *rbuff;		/* receiver buffer		*/
 	int            rcount;         /* received chars counter       */
 
+	int           noesc;
+
 	/* frame callback */
 	void         (*frame)(struct slip *, void *arg, unsigned char *buf, int len);
 	void         *arg;
@@ -46,7 +48,7 @@ static ssize_t __write(struct slip_rdwr *srd, const void *buf, size_t size)
 			if (errno == EINTR || errno == EAGAIN)
 				continue;
 			else {
-				perror("slip_send: ");
+				perror(" slip send: ");
 				break;
 			}
 		}
@@ -95,7 +97,7 @@ static struct slip_rdwr * __fdrdwr_get(int fd)
 	return &fdr->base;
 }
 
-struct slip *slip_generic_new(struct slip_rdwr *srd, int mtu)
+struct slip *slip_generic_new(struct slip_rdwr *srd, int mtu, int noesc)
 {
 	int sz;
 	struct slip *sl;
@@ -108,13 +110,14 @@ struct slip *slip_generic_new(struct slip_rdwr *srd, int mtu)
 	sl->rdwr  = srd;
 	sl->mtu   = mtu;
 	sl->rbuff = (unsigned char *)&sl[1];
+	sl->noesc = noesc;
 
 	return sl;
 }
 
-struct slip *slip_new(int fd, int mtu)
+struct slip *slip_new(int fd, int mtu, int noesc)
 {
-	return slip_new_with_rdwr(__fdrdwr_get(fd), mtu);
+	return slip_generic_new(__fdrdwr_get(fd), mtu, noesc);
 }
 
 void slip_free(struct slip *sl)
@@ -242,24 +245,32 @@ int  slip_recv(struct slip *sl)
 	unsigned char mtu[sl->mtu];
 
 	n = sl->rdwr->read(sl->rdwr, mtu, sizeof mtu);
-	for (i = 0; i < n; ++i) {
-		slip_unesc(sl, mtu[i]);
+	if (!sl->noesc) {
+		for (i = 0; i < n; ++i) {
+			slip_unesc(sl, mtu[i]);
+		}
+	} else {
+		if (sl->frame && n > 0)
+			sl->frame(sl, sl->arg, mtu, n);
 	}
-
 	return n >= 0 ? 0 : -1;
 }
 
 int slip_send(struct slip *sl, unsigned char *buf, int len)
 {
 	unsigned char mtu[len << 1];
-	int tot, n;
+	int tot, n = len;
 
-	n = slip_esc(buf, mtu, len);
-	if (n <= 0) { /* invalid length */
-		return -1;
+	if (!sl->noesc) {
+		n = slip_esc(buf, mtu, len);
+		if (n <= 0) { /* invalid length */
+			return -1;
+		}
+		buf = mtu;
 	}
 
-	tot = sl->rdwr->write(sl->rdwr, mtu, n);
+	fprintf(stderr, "%s: rdwr %p, write: %p\n", __func__, sl->rdwr, sl->rdwr? sl->rdwr->write : 0 );
+	tot = sl->rdwr->write(sl->rdwr, buf, n);
 	return tot == n ? 0 : -2;
 }
 

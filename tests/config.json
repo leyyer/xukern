@@ -1,6 +1,6 @@
 {
 	"environ": {
-		"threads" : "8",
+		"threads" : "2",
 		"mod_path" : "./svc",
 		"lua_cpath" : "./btif/?.so",
 		"logger" : "logger",

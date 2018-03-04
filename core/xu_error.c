@@ -98,15 +98,16 @@ static void log_blob(FILE *f, const void * buffer, size_t sz)
 {
 	size_t i;
 	const uint8_t * buf = buffer;
-	for (i=0;i!=sz;i++) {
-		fprintf(f, "%02x", buf[i]);
+
+	for (i = 0; i < sz; i++) {
+		fprintf(f, "%02x%c", buf[i], (i + 1) % 8 ? ' ' : '\n');
 	}
 }
 
 static void log_io(FILE * f, const struct xu_io_event * message, size_t sz)
 {
 	size_t size = message->size;
-	fprintf(f, "[io] %d %d %d %d", message->event, message->fdesc, size, message->u.errcode);
+	fprintf(f, "[io] %u %d %d %d :> ", message->fdesc, message->event, size, message->u.errcode);
 
 	if (sz > 0) {
 		const void *ud = message->data;

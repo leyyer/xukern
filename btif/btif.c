@@ -9,6 +9,12 @@
 #include <termios.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <linux/if.h>
+#include <linux/if_ether.h>
+#include <linux/if_packet.h>
 #include "slip.h"
 #include "btif.h"
 #include "xu_malloc.h"
@@ -56,6 +62,12 @@ static unsigned char __cs(unsigned char *d, int length)
 	unsigned int sum;
 	int i;
 
+	printf("__cs data: \n");
+	for (i = 0; i < length; ++i) {
+		printf("%02x%c", d[i], (i + 1) % 8 ? ' ' : '\n');
+	}
+	printf("\n__cs data end\n");
+		
 	sum = 0;
 	for (i = 0; i < length; ++i) {
 		sum += d[i];
@@ -223,10 +235,9 @@ static void __cmd_handler(struct slip *sl, void *arg, unsigned char *buf, int le
 		return;
 	}
 
-	s = __cs(buf + BTIF_CMD_OFF, len - SLIP_MIN_LEN);
+	s = __cs(buf, len - 1);
 	if (s != buf[len-1]) {
 		fprintf(stderr, "checksum don't match: 0x%x, expected: 0x%x\n", s, buf[len-1]);
-		return;
 	}
 
 	if (__filter(bi, cmd, buf + BTIF_CMD_OFF, clen)) { /* filte out */
@@ -287,81 +298,132 @@ static int __tty_fd(const char *dev)
 	return fd;
 }
 
-btif_t btif_generic_new(struct slip_rdwr *srd)
+int btif_tty_open(const char *dev)
 {
-	btif_t bi = NULL;
-	struct slip *sl;
-	int mtu = BTIF_MTU;
-	char *e;
+	return __tty_fd(dev);
+}
 
-	e = getenv("BTIF_MTU");
+static int iface_get_id(int fd, const char *device)
+{
+	struct ifreq	ifr;
+
+	memset(&ifr, 0, sizeof(ifr));
+	strncpy(ifr.ifr_name, device, sizeof(ifr.ifr_name));
+
+	if (ioctl(fd, SIOCGIFINDEX, &ifr) == -1) {
+		fprintf(stderr, "get index failed.\n");
+		return -1;
+	}
+
+	return ifr.ifr_ifindex;
+}
+
+static int iface_bind(int fd, int ifindex)
+{
+	struct sockaddr_ll	sll;
+
+	memset(&sll, 0, sizeof(sll));
+	sll.sll_family		= AF_PACKET;
+	sll.sll_ifindex		= ifindex;
+	sll.sll_protocol	= htons(ETH_P_ALL);
+
+	if (bind(fd, (struct sockaddr *) &sll, sizeof(sll)) == -1) {
+		fprintf(stderr, "find failed\n");
+		return -1;
+	}
+	return 0;
+}
+
+int btif_sock_open(const char *ifdev)
+{
+	int s, idx;
+
+	if ((s = socket(AF_PACKET, SOCK_RAW, 0)) == -1) {
+		fprintf(stderr, "create socket failed: %s\n", strerror(errno));
+		return -1;
+	}
+	if ((idx = iface_get_id(s, ifdev)) < 0) {
+		close(s);
+		return -2;
+	}
+	if (iface_bind(s, idx) < 0) {
+		close(s);
+		return -3;
+	}
+	return (s);
+}
+
+static int __slip_mtu(void)
+{
+	int mtu = BTIF_MTU;
+	char *e = getenv("BTIF_MTU");
 	if (e) {
 		mtu = atoi(e);
 	}
 
-	sl = slip_generic_new(srd, mtu);
-	if (sl == NULL) {
-		fprintf(stderr, "can't create slip object.\n");
-		goto failed;
-	}
+	return mtu;
+}
+
+static btif_t __btif_new(struct slip *sl, int fd)
+{
+	btif_t bi;
 
 	bi = xu_calloc(1, sizeof *bi);
-	if (bi == NULL) {
-		fprintf(stderr, "%s: out of memory.\n", __func__);
-		goto failed;
-	}
-	bi->fd      = -1;
-	bi->slip    = sl;
-	bi->on      = 0;
+	bi->fd       = fd;
+	bi->slip     = sl;
+	bi->on       = 0;
 	bi->registry = BTIF_REGSTRY_FAIL;
-	bi->valid   = BTIF_SRV_INVALID;
-
+	bi->valid    = BTIF_SRV_INVALID;
 	slip_set_callback(bi->slip, __cmd_handler, bi);
 
 	return bi;
-failed:
-	return NULL;
+}
+
+btif_t btif_generic_new(struct slip_rdwr *srd, int noesc)
+{
+	struct slip *sl;
+
+	sl = slip_generic_new(srd, __slip_mtu(), noesc);
+	if (sl == NULL) {
+		fprintf(stderr, "can't create slip object.\n");
+		return NULL;
+	}
+	return __btif_new(sl, -1);
 }
 
 btif_t btif_new(const char *dev)
 {
 	int fd;
-	btif_t bi = NULL;
 	struct slip *sl;
-	int mtu = BTIF_MTU;
-	char *e;
 
 	if ((fd = __tty_fd(dev)) < 0) {
 		return NULL;
 	}
-	e = getenv("BTIF_MTU");
-	if (e) {
-		mtu = atoi(e);
-	}
 
-	sl = slip_new(fd, mtu);
+	sl = slip_new(fd, __slip_mtu(), 0);
 	if (sl == NULL) {
 		fprintf(stderr, "can't create slip object.\n");
-		goto failed;
+		close(fd);
+		return NULL;
 	}
 
-	bi = xu_calloc(1, sizeof *bi);
-	if (bi == NULL) {
-		fprintf(stderr, "%s: out of memory.\n", __func__);
-		goto failed;
+	return __btif_new(sl, fd);
+}
+
+btif_t btif_sock_new(const char *ifdev)
+{
+	int s;
+	struct slip *sl;
+
+	s = btif_sock_open(ifdev);
+	if (s < 0)
+		return NULL;
+	if ((sl = slip_new(s, __slip_mtu(), 1)) == NULL) {
+		close(s);
+		return NULL;
 	}
-	bi->fd      = fd;
-	bi->slip    = sl;
-	bi->on      = 0;
-	bi->registry = BTIF_REGSTRY_FAIL;
-	bi->valid   = BTIF_SRV_INVALID;
 
-	slip_set_callback(bi->slip, __cmd_handler, bi);
-
-	return bi;
-failed:
-	close(fd);
-	return NULL;
+	return __btif_new(sl, s);
 }
 
 int btif_get_fd(btif_t bi)
@@ -395,7 +457,7 @@ int btif_cmd(btif_t bi, unsigned char cmd, unsigned char *cbuf, int clen)
 		memcpy(frame + BTIF_CMD_OFF, cbuf, clen);
 	}
 
-	cs = __cs(&frame[BTIF_CMD_OFF], clen);
+	cs = __cs(frame, clen + BTIF_CMD_OFF);
 
 	frame[clen + BTIF_CMD_OFF] = cs;
 

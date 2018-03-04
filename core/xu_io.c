@@ -166,6 +166,7 @@ static void __on_close(uv_handle_t *h)
 {
 	struct iohandle *ih = (struct iohandle *)h;
 
+	assert(ih->handle != 0);
 	xu_error(NULL, "freeing owner [%u]  fd[%u] %p", ih->owner, ih->handle, ih);
 
 	xu_free(ih);
@@ -670,6 +671,7 @@ static void __handle_req_close(struct io_context *ic, struct request *req)
 	struct iohandle *h = __find_io(ic, req->header.owner, req->header.fdesc);
 
 	if (h) {
+		/* fprintf(stderr, "%s close\n", __func__); */
 		__close_handle(h, 0);
 	}
 }
@@ -739,6 +741,7 @@ static void __on_poll(uv_poll_t *handle, int status, int event)
 				xu_actor_unref(ctx);
 			} else {/* actor dead ? */
 				xu_free(xie);
+				/* fprintf(stderr, "%s readable can't find handle\n", __func__); */
 				__close_handle(io, XIE_ERR_RECV_DATA);
 			}
 		} else { /* XXX: nread < 0 case */
@@ -752,6 +755,10 @@ static void __handle_req_pollfd(struct io_context *ic, struct request *req)
 	struct iohandle *io;
 	
 	io = alloc_iohandle(ic);
+
+	io->owner = req->header.owner;
+	io->handle = req->header.fdesc;
+
 	uv_poll_init(uv_default_loop(), &io->u.fd, req->u.reserved);
 	uv_poll_start(&io->u.fd, UV_READABLE, __on_poll);
 }
