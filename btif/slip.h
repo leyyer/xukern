@@ -4,6 +4,14 @@
 extern "C" {
 #endif
 
+#include <stddef.h>
+
+struct slip_rdwr {
+	ssize_t (*read)(struct slip_rdwr *, void *buf, size_t len);
+	ssize_t (*write)(struct slip_rdwr *, const void *buf, size_t len);
+	int     (*close)(struct slip_rdwr *);
+};
+
 struct slip;
 
 #define SLIP_MIN_LEN    (4)     /* 1 byte cmd + 2 bytes length + 1 byte checksum */
@@ -16,6 +24,8 @@ struct slip;
 
 #define SLF_ESCAPE	1               /* ESC received                 */
 #define SLF_ERROR	2               /* Parity, etc. error           */
+
+struct slip * slip_generic_new(struct slip_rdwr *srd, int mtu);
 
 /* 
  * create slip object. 

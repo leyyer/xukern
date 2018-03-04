@@ -267,14 +267,10 @@ static void __set_tty_mode(int fd)
 	tcsetattr(fd, TCSANOW, &tio);
 }
 
-btif_t btif_new(const char *dev)
+static int __tty_fd(const char *dev)
 {
 	int fd;
 	char path[PATH_MAX] = {0};
-	btif_t bi = NULL;
-	struct slip *sl;
-	int mtu = BTIF_MTU;
-	char *e;
 
 	fd = open(dev, O_RDWR | O_NOCTTY | O_NDELAY);
 	if (fd < 0 && dev[0] != '/') {
@@ -284,11 +280,60 @@ btif_t btif_new(const char *dev)
 
 	if (fd < 0) { /* open device failed. */
 		fprintf(stderr, "open device: %s failed (%s).\n", dev, strerror(errno));
-		return NULL;
+		return fd;
 	}
 
 	__set_tty_mode(fd);
+	return fd;
+}
 
+btif_t btif_generic_new(struct slip_rdwr *srd)
+{
+	btif_t bi = NULL;
+	struct slip *sl;
+	int mtu = BTIF_MTU;
+	char *e;
+
+	e = getenv("BTIF_MTU");
+	if (e) {
+		mtu = atoi(e);
+	}
+
+	sl = slip_generic_new(srd, mtu);
+	if (sl == NULL) {
+		fprintf(stderr, "can't create slip object.\n");
+		goto failed;
+	}
+
+	bi = xu_calloc(1, sizeof *bi);
+	if (bi == NULL) {
+		fprintf(stderr, "%s: out of memory.\n", __func__);
+		goto failed;
+	}
+	bi->fd      = -1;
+	bi->slip    = sl;
+	bi->on      = 0;
+	bi->registry = BTIF_REGSTRY_FAIL;
+	bi->valid   = BTIF_SRV_INVALID;
+
+	slip_set_callback(bi->slip, __cmd_handler, bi);
+
+	return bi;
+failed:
+	return NULL;
+}
+
+btif_t btif_new(const char *dev)
+{
+	int fd;
+	btif_t bi = NULL;
+	struct slip *sl;
+	int mtu = BTIF_MTU;
+	char *e;
+
+	if ((fd = __tty_fd(dev)) < 0) {
+		return NULL;
+	}
 	e = getenv("BTIF_MTU");
 	if (e) {
 		mtu = atoi(e);

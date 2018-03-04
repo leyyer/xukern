@@ -5,6 +5,13 @@
 extern "C" {
 #endif
 
+/* 
+ * See slip.h.
+ *
+ * slip reader/writer base object.
+ */
+struct slip_rdwr;
+
 /* max frame size */
 #define BTIF_MTU  (1024)
 
@@ -19,6 +26,10 @@ typedef struct btif * btif_t;
  */
 btif_t btif_new(const char *dev);
 
+/*
+ * Create a BT-U131A object with reader/writer
+ */
+btif_t btif_generic_new(struct slip_rdwr *srd);
 /* 
  * Close BT-U131A device.
  */
