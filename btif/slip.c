@@ -65,8 +65,9 @@ static ssize_t __read(struct slip_rdwr *srd, void *buf, size_t size)
 retry:
 	r = read(fdr->fd, sbuf, size);
 	if (r == -1) {
-		if (errno == EINTR || errno == EAGAIN)
+		if (errno == EINTR || errno == EAGAIN) {
 			goto retry;
+		}
 	}
 	if (r > 0) {
 		sbuf += r;
@@ -269,8 +270,8 @@ int slip_send(struct slip *sl, unsigned char *buf, int len)
 		buf = mtu;
 	}
 
-	fprintf(stderr, "%s: rdwr %p, write: %p\n", __func__, sl->rdwr, sl->rdwr? sl->rdwr->write : 0 );
 	tot = sl->rdwr->write(sl->rdwr, buf, n);
+
 	return tot == n ? 0 : -2;
 }
 

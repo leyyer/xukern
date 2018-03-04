@@ -62,12 +62,13 @@ static unsigned char __cs(unsigned char *d, int length)
 	unsigned int sum;
 	int i;
 
+#if 0
 	printf("__cs data: \n");
 	for (i = 0; i < length; ++i) {
 		printf("%02x%c", d[i], (i + 1) % 8 ? ' ' : '\n');
 	}
 	printf("\n__cs data end\n");
-		
+#endif
 	sum = 0;
 	for (i = 0; i < length; ++i) {
 		sum += d[i];

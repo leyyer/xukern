@@ -3,17 +3,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <termios.h>
-#include <fcntl.h>
-#include <limits.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <netinet/in.h>
-#include <linux/if.h>
-#include <linux/if_ether.h>
-#include <linux/if_packet.h>
 #include "xu_kern.h"
 #include "xu_malloc.h"
 #include "xu_util.h"
@@ -96,37 +85,14 @@ static ssize_t __tty_read(struct slip_rdwr *srd, void *buf, size_t len)
 	return len;
 }
 
-static int iface_get_id(int fd, const char *device)
-{
-	struct ifreq	ifr;
-
-	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, device, sizeof(ifr.ifr_name));
-
-	if (ioctl(fd, SIOCGIFINDEX, &ifr) == -1) {
-		fprintf(stderr, "get index failed.\n");
-		return -1;
-	}
-
-	return ifr.ifr_ifindex;
-}
-
 static ssize_t __tty_write(struct slip_rdwr *srd, const void *buf, size_t len)
 {
 	int n;
 	const unsigned char *sbuf = buf;
 	struct btif *bif = (struct btif *)srd;
-	struct sockaddr_ll	sll;
-
-	memset(&sll, 0, sizeof(sll));
-	sll.sll_family		= AF_PACKET;
-	sll.sll_ifindex		= iface_get_id(bif->tty, "sl0");
-	sll.sll_protocol	= htons(ETH_P_ALL);
 	
 	while (len > 0) {
 		n = write(bif->tty, sbuf, len);
-//		n = send(bif->tty, sbuf, len, 0);
-	//	n = sendto(bif->tty, sbuf, len, 0, (struct sockaddr *)&sll, sizeof sll);
 		if (n == -1) {
 			if (errno == EINTR || errno == EAGAIN)
 				continue;
@@ -140,9 +106,7 @@ static ssize_t __tty_write(struct slip_rdwr *srd, const void *buf, size_t len)
 	if (n < 0) {
 		perror("sendto: ");
 	}
-	n = sbuf - (const unsigned char *)buf;
-	printf("written %d bytes\n", n);
-	return n;
+	return sbuf - (const unsigned char *)buf;
 }
 
 static void __do_close(struct btif *bi)
