@@ -11,6 +11,7 @@
 #include <limits.h>
 #include "slip.h"
 #include "btif.h"
+#include "xu_malloc.h"
 
 #define BTIF_BAUDRATE      B115200
 #define BTIF_CMD_OFF       (3)
@@ -299,7 +300,7 @@ btif_t btif_new(const char *dev)
 		goto failed;
 	}
 
-	bi = calloc(1, sizeof *bi);
+	bi = xu_calloc(1, sizeof *bi);
 	if (bi == NULL) {
 		fprintf(stderr, "%s: out of memory.\n", __func__);
 		goto failed;
@@ -333,7 +334,7 @@ void btif_free(btif_t bi)
 {
 	slip_free(bi->slip);
 	close(bi->fd);
-	free(bi);
+	xu_free(bi);
 }
 
 int btif_cmd(btif_t bi, unsigned char cmd, unsigned char *cbuf, int clen)

@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include "slip.h"
+#include "xu_malloc.h"
 
 #define BITS_PER_LONG 32
 #define BIT(nr)       (1UL << (nr))
@@ -33,7 +34,7 @@ struct slip *slip_new(int fd, int mtu)
 	mtu += SLIP_MIN_LEN;
 
 	sz = sizeof *sl + mtu;
-	sl = calloc(1, sz);
+	sl = xu_calloc(1, sz);
 
 	if (sl) {
 		sl->fd    = fd;
@@ -46,7 +47,7 @@ struct slip *slip_new(int fd, int mtu)
 
 void slip_free(struct slip *sl)
 {
-	free(sl);
+	xu_free(sl);
 }
 
 void slip_set_callback(struct slip *sl, void (*frame)(struct slip *, void *arg, unsigned char *buf, int len), void *arg)

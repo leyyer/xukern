@@ -25,7 +25,7 @@ DEBUG_FLAG := -O0 -g -ggdb
 
 LINK_ARCHIVES := -Wl,-whole-archive -lcjson -luv -ljemalloc_pic -llua -Wl,-no-whole-archive
 
-LUA_CFLAGS += -DLUA_COMPAT_MODULE 
+LUA_CFLAGS += -DLUA_COMPAT_MODULE -DLUA_USE_POSIX -DLUA_USE_DLOPEN
 
 CFLAGS  += -I$(TOP)/include -I$(RD3ROOT)/include -I$(TOP)/core -std=gnu99 -Wall \
 		   $(DEBUG_FLAG) -DUSE_JEMALLOC $(LUA_CFLAGS) -I$(RD3ROOT)/include/cjson -fPIC
@@ -61,7 +61,7 @@ luajit:
 	$(MAKE) HOST_CC=gcc STATIC_CC=$(CC) PREFIX=/usr CFLAGS='-fPIC -O2' DYNAMIC_CC='$(CC) -fPIC' TARGET_LD=$(CC) TARGET_AR='$(AR) rcs' TARGET_STRIP=$(STRIP) DESTDIR=$(TOP) -C $(LUAJIT_DIR) install clean
 
 lua:
-	$(MAKE) CC="$(CC) -fPIC -std=gnu99" AR="$(AR) rcs" RUNLIB=$(RUNLIB) -C $(LUA_DIR) liblua.a
+	$(MAKE) CC="$(CC) -fPIC -std=gnu99" CFLAGS="$(CFLAGS)" AR="$(AR) rcs" RUNLIB=$(RUNLIB) -C $(LUA_DIR) liblua.a
 	cp -f $(LUA_DIR)/lua.h $(LUA_DIR)/luaconf.h $(LUA_DIR)/lualib.h $(LUA_DIR)/lauxlib.h $(LUA_DIR)/lua.hpp $(RD3ROOT)/include
 	cp -f $(LUA_DIR)/liblua.a $(RD3ROOT)/lib/
 	$(MAKE) -C $(LUA_DIR) clean
