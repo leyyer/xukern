@@ -6,13 +6,13 @@ extern "C" {
 
 #include <stddef.h>
 
-struct slip_rdwr {
-	ssize_t (*read)(struct slip_rdwr *, void *buf, size_t len);
-	ssize_t (*write)(struct slip_rdwr *, const void *buf, size_t len);
-	int     (*close)(struct slip_rdwr *);
+struct slip;
+
+struct slip_io {
+	void (*ingoing)(struct slip *, void *data, void *buf, size_t len); /* slip data packet */
+	int  (*outgoing)(struct slip *, void *data, const void *buf, size_t len); /* data to wire */
 };
 
-struct slip;
 
 #define SLIP_MIN_LEN    (4)     /* 1 byte cmd + 2 bytes length + 1 byte checksum */
 
@@ -25,37 +25,39 @@ struct slip;
 #define SLF_ESCAPE	1               /* ESC received                 */
 #define SLF_ERROR	2               /* Parity, etc. error           */
 
-struct slip * slip_generic_new(struct slip_rdwr *srd, int mtu, int noesc);
-
 /* 
  * create slip object. 
  *
- * fd  : the uart file descriptor.
  * mtu : max frame length.
+ * extra_size: the extra size to malloc.
  *
  * return : slip object on sucess, NULL on error.
  */
-struct slip * slip_new(int fd, int mtu, int noesc);
+struct slip * slip_new(int mtu, size_t extra_size);
+
+/*
+ * get the malloced extra data
+ */
+void *slip_get_extra(struct slip *);
 
 /*
  * free slip object, must not use it afterwards.
  */
-void          slip_free(struct slip *);
+void slip_free(struct slip *);
 
 /* 
  * set frame handler.
  *
  * If it has a complete frame, call the `frame' functions.
  */
-void slip_set_callback(struct slip *, void (*frame)(struct slip *, void *arg, unsigned char *buf, int len), void *arg);
+void slip_set_callback(struct slip *, struct slip_io *io, void *data);
 
 /* 
- * If file descriptor READABLE, call this function. 
- * or call it periodicly.
+ * Put data into slip object.
  *
  * return: 0 on sucess, < 0 on error.
  */
-int  slip_recv(struct slip *);
+int slip_recv(struct slip *sl, unsigned char *buf, int len);
 
 /*
  * send a slip frame.

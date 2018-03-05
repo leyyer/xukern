@@ -11,28 +11,23 @@
 #define BIT_MASK(nr)  (1UL << ((nr) % BITS_PER_LONG))
 #define BIT_WORD(nr)  ((nr) / BITS_PER_LONG)
 
-struct fd_rdwr {
-	struct slip_rdwr base;
-	int fd;
-};
-
 struct slip {
-	struct slip_rdwr *rdwr;
-
 	unsigned long flags;		/* Flag values/ mode etc	*/
 
 	int           mtu;
 	/* These are pointers to the malloc()ed frame buffers. */
 	unsigned char *rbuff;		/* receiver buffer		*/
-	int            rcount;         /* received chars counter       */
-
-	int           noesc;
+	int            rcount;      /* received chars counter       */
 
 	/* frame callback */
-	void         (*frame)(struct slip *, void *arg, unsigned char *buf, int len);
-	void         *arg;
+	struct slip_io sio;
+	void           *udata;
+
+	/* extra data */
+	void        *extra;
 };
 
+#if 0
 static ssize_t __write(struct slip_rdwr *srd, const void *buf, size_t size)
 {
 	int n;
@@ -98,7 +93,7 @@ static struct slip_rdwr * __fdrdwr_get(int fd)
 	return &fdr->base;
 }
 
-struct slip *slip_generic_new(struct slip_rdwr *srd, int mtu, int noesc)
+struct slip *slip_generic_new(struct slip_rdwr *srd, int mtu)
 {
 	int sz;
 	struct slip *sl;
@@ -111,27 +106,37 @@ struct slip *slip_generic_new(struct slip_rdwr *srd, int mtu, int noesc)
 	sl->rdwr  = srd;
 	sl->mtu   = mtu;
 	sl->rbuff = (unsigned char *)&sl[1];
-	sl->noesc = noesc;
+
+	return sl;
+}
+#endif
+
+struct slip *slip_new(int mtu, size_t extra_size)
+{
+	size_t sz;
+	struct slip *sl;
+
+	mtu += SLIP_MIN_LEN;
+	sz = sizeof *sl + mtu + extra_size;
+	sl = xu_calloc(1, sz);
+
+	sl->mtu    = mtu;
+	sl->rcount = 0;
+	sl->extra  = &sl[1];
+	sl->rbuff  = (unsigned char *)sl->extra + extra_size;
 
 	return sl;
 }
 
-struct slip *slip_new(int fd, int mtu, int noesc)
-{
-	return slip_generic_new(__fdrdwr_get(fd), mtu, noesc);
-}
-
 void slip_free(struct slip *sl)
 {
-	if (sl->rdwr && sl->rdwr->close)
-		sl->rdwr->close(sl->rdwr);
 	xu_free(sl);
 }
 
-void slip_set_callback(struct slip *sl, void (*frame)(struct slip *, void *arg, unsigned char *buf, int len), void *arg)
+void slip_set_callback(struct slip *sl, struct slip_io *io, void *data)
 {
-	sl->frame = frame;
-	sl->arg   = arg;
+	sl->sio   = *io;
+	sl->udata = data;
 }
 
 static int slip_esc(unsigned char *s, unsigned char *d, int len)
@@ -211,8 +216,8 @@ static void slip_unesc(struct slip *sl, unsigned char s)
 	case END:
 		if (!test_and_clear_bit(SLF_ERROR, &sl->flags) &&
 		    (sl->rcount >= SLIP_MIN_LEN)) {
-			if (sl->frame)
-				sl->frame(sl, sl->arg, sl->rbuff, sl->rcount);
+			if (sl->sio.ingoing)
+				sl->sio.ingoing(sl, sl->udata, sl->rbuff, sl->rcount);
 		}
 		clear_bit(SLF_ESCAPE, &sl->flags);
 		sl->rcount = 0;
@@ -240,37 +245,34 @@ static void slip_unesc(struct slip *sl, unsigned char s)
 	}
 }
 
-int  slip_recv(struct slip *sl)
+void *slip_get_extra(struct slip *sl)
 {
-	int i, n;
-	unsigned char mtu[sl->mtu];
+	return sl->extra;
+}
 
-	n = sl->rdwr->read(sl->rdwr, mtu, sizeof mtu);
-	if (!sl->noesc) {
-		for (i = 0; i < n; ++i) {
-			slip_unesc(sl, mtu[i]);
-		}
-	} else {
-		if (sl->frame && n > 0)
-			sl->frame(sl, sl->arg, mtu, n);
+int slip_recv(struct slip *sl, unsigned char *buf, int len)
+{
+	int i;
+
+	for (i = 0; i < len; ++i) {
+		slip_unesc(sl, buf[i]);
 	}
-	return n >= 0 ? 0 : -1;
+
+	return 0;
 }
 
 int slip_send(struct slip *sl, unsigned char *buf, int len)
 {
 	unsigned char mtu[len << 1];
-	int tot, n = len;
+	int tot = -1, n = len;
 
-	if (!sl->noesc) {
-		n = slip_esc(buf, mtu, len);
-		if (n <= 0) { /* invalid length */
-			return -1;
-		}
-		buf = mtu;
+	n = slip_esc(buf, mtu, len);
+	if (n <= 0) { /* invalid length */
+		return -1;
 	}
 
-	tot = sl->rdwr->write(sl->rdwr, buf, n);
+	if (sl->sio.outgoing)
+		tot = sl->sio.outgoing(sl, sl->udata, mtu, n);
 
 	return tot == n ? 0 : -2;
 }

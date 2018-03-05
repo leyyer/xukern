@@ -31,7 +31,6 @@
 #define BTIF_SRV_INVALID    (0x01)
 
 struct btif {
-	int fd;
 	struct slip *slip;
 
 	struct btif_vtbl *vtbl;
@@ -47,6 +46,12 @@ struct btif {
 	char dmo_ver[BTIF_CSTRLEN + 1];
 	char adapt_ver[BTIF_CSTRLEN + 1];
 	char kern_ver[BTIF_CSTRLEN + 1];
+
+	int (*recv)(struct slip *sl, unsigned char *buf, int len);
+	int (*send)(struct slip *sl, unsigned char *buf, int len);
+
+	int (*outgoing)(btif_t, void *data, const unsigned char *buf, int len);
+	void *data;
 
 	void (*cmd)(void *arg, unsigned char cmd, unsigned char *cmdbuf, int cmdlen);
 	void *arg;
@@ -221,11 +226,12 @@ static int __filter(btif_t bi, unsigned char cmd, unsigned char *cbuf, int clen)
 	return found;
 }
 
-static void __cmd_handler(struct slip *sl, void *arg, unsigned char *buf, int len)
+static void __cmd_handler(struct slip *sl, void *arg, void *_vbuf, size_t len)
 {
 	btif_t bi = arg;
 	int cmd, s;
 	int clen;
+	unsigned char *buf = _vbuf;
 
 	(void)sl;
 	cmd  = buf[0];
@@ -365,71 +371,61 @@ static int __slip_mtu(void)
 	return mtu;
 }
 
-static btif_t __btif_new(struct slip *sl, int fd)
+static int __output(struct slip *sl, void *data, const void *buf, size_t len)
 {
-	btif_t bi;
+	btif_t bif = data;
 
-	bi = xu_calloc(1, sizeof *bi);
-	bi->fd       = fd;
-	bi->slip     = sl;
-	bi->on       = 0;
-	bi->registry = BTIF_REGSTRY_FAIL;
-	bi->valid    = BTIF_SRV_INVALID;
-	slip_set_callback(bi->slip, __cmd_handler, bi);
-
-	return bi;
+	return bif->outgoing(bif, bif->data, buf, len);
 }
 
-btif_t btif_generic_new(struct slip_rdwr *srd, int noesc)
+btif_t btif_new(int (*outgoing)(btif_t, void *data, const unsigned char *buf, int len), void *ud)
 {
 	struct slip *sl;
+	btif_t bif;
+	struct slip_io sio = {
+		.ingoing  = __cmd_handler,
+		.outgoing = __output
+	};
 
-	sl = slip_generic_new(srd, __slip_mtu(), noesc);
-	if (sl == NULL) {
-		fprintf(stderr, "can't create slip object.\n");
-		return NULL;
-	}
-	return __btif_new(sl, -1);
+	sl = slip_new(__slip_mtu(), sizeof *bif);
+	bif = slip_get_extra(sl);
+
+	bif->slip     = sl;
+	bif->on       = 0;
+	bif->registry = BTIF_REGSTRY_FAIL;
+	bif->valid    = BTIF_SRV_INVALID;
+	bif->outgoing = outgoing;
+	bif->data     = ud;
+	slip_set_callback(sl, &sio, bif);
+
+	bif->recv = slip_recv;
+	bif->send = slip_send;
+
+	return bif;
 }
 
-btif_t btif_new(const char *dev)
+static int __raw_recv(struct slip *sl, unsigned char *buf, int len)
 {
-	int fd;
-	struct slip *sl;
+	btif_t bi = slip_get_extra(sl);
+	__cmd_handler(sl, bi, buf, len);
 
-	if ((fd = __tty_fd(dev)) < 0) {
-		return NULL;
-	}
-
-	sl = slip_new(fd, __slip_mtu(), 0);
-	if (sl == NULL) {
-		fprintf(stderr, "can't create slip object.\n");
-		close(fd);
-		return NULL;
-	}
-
-	return __btif_new(sl, fd);
+	return 0;
 }
 
-btif_t btif_sock_new(const char *ifdev)
+static int __raw_send(struct slip *sl, unsigned char *buf, int len)
 {
-	int s;
-	struct slip *sl;
-
-	s = btif_sock_open(ifdev);
-	if (s < 0)
-		return NULL;
-	if ((sl = slip_new(s, __slip_mtu(), 1)) == NULL) {
-		close(s);
-		return NULL;
-	}
-
-	return __btif_new(sl, s);
+	btif_t bi = slip_get_extra(sl);
+	__output(sl, bi, buf, len);
+	return 0;
 }
 
-int btif_get_fd(btif_t bi)
+btif_t btif_sock_new(int (*outgoing)(btif_t, void *data, const unsigned char *buf, int len), void *ud)
 {
-	return bi->fd;
+	btif_t bif = btif_new(outgoing, ud);
+	bif->recv = __raw_recv;
+	bif->send = __raw_send;
+
+	return bif;
 }
 
 void btif_notify_handler(btif_t bi, void (*cmd)(void *arg, unsigned char cmd, unsigned char *cmdbuf, int cmdlen), void *arg)
@@ -441,8 +437,6 @@ void btif_notify_handler(btif_t bi, void (*cmd)(void *arg, unsigned char cmd, un
 void btif_free(btif_t bi)
 {
 	slip_free(bi->slip);
-	close(bi->fd);
-	xu_free(bi);
 }
 
 int btif_cmd(btif_t bi, unsigned char cmd, unsigned char *cbuf, int clen)
@@ -462,12 +456,12 @@ int btif_cmd(btif_t bi, unsigned char cmd, unsigned char *cbuf, int clen)
 
 	frame[clen + BTIF_CMD_OFF] = cs;
 
-	return slip_send(bi->slip, frame, sizeof frame);
+	return bi->send(bi->slip, frame, sizeof frame);
 }
 
-int btif_step(btif_t bi)
+int btif_recv(btif_t bi, void *data, size_t len)
 {
-	return slip_recv(bi->slip);
+	return bi->recv(bi->slip, data, len);
 }
 
 int btif_set_id(btif_t bi, unsigned char id_type, unsigned char *id, int len)
@@ -542,7 +536,7 @@ int btif_reboot(btif_t bi)
 	 * please see the spec doc:
 	 *  the command have no length field.
 	 */
-	return slip_send(bi->slip, frame, sizeof frame);
+	return bi->send(bi->slip, frame, sizeof frame);
 }
 
 /*
@@ -553,12 +547,12 @@ int btif_shutdown(btif_t bi)
 	/* XXX: have no length field. */
 	unsigned char frame[] = {BTIF_CMD_POWER_OFF, 0x00, 0x00};
 
-	return slip_send(bi->slip, frame, sizeof frame);
+	return bi->send(bi->slip, frame, sizeof frame);
 }
 
 int btif_factory_reset(btif_t bi)
 {
 	unsigned char frame[] = {BTIF_CMD_RECOVER_CONF, 0x00, 0x00};
-	return slip_send(bi->slip, frame, sizeof frame);
+	return bi->send(bi->slip, frame, sizeof frame);
 }
 

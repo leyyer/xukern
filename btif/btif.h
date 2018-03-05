@@ -5,17 +5,10 @@
 extern "C" {
 #endif
 
-/* 
- * See slip.h.
- *
- * slip reader/writer base object.
- */
-struct slip_rdwr;
-
 /* max frame size */
 #define BTIF_MTU  (1024)
 
-typedef struct btif * btif_t;
+typedef struct btif *btif_t;
 
 /*
  * open dev tty
@@ -30,35 +23,19 @@ int btif_sock_open(const char *ifdev);
 /*
  * Create BT-U131A object.
  *
- * dev: uart device name, such as: ttymxc1 or /dev/ttymxc1
+ *  outgoing: data send to wire callback.
+ *  ud: callback data.
  *
  * return: btif object or NULL
  */
-btif_t btif_new(const char *dev);
+btif_t btif_new(int (*outgoing)(btif_t, void *data, const unsigned char *buf, int len), void *ud);
 
-/*
- * Create BT-U131A object.
- *
- * dev: netif device name, such as: sl0
- *
- * return: btif object or NULL
- */
-btif_t btif_sock_new(const char *ifdev);
-
-/*
- * Create a BT-U131A object with reader/writer
- */
-btif_t btif_generic_new(struct slip_rdwr *srd, int noesc);
+btif_t btif_sock_new(int (*outgoing)(btif_t, void *data, const unsigned char *buf, int len), void *ud);
 
 /* 
  * Close BT-U131A device.
  */
 void   btif_free(btif_t);
-
-/*
- * Get lowlevel file descriptor.
- */
-int btif_get_fd(btif_t bi);
 
 /*
  * set command handler.
@@ -79,9 +56,9 @@ void btif_notify_handler(btif_t, void (*cmd)(void *arg, unsigned char cmd, unsig
 int btif_cmd(btif_t bi, unsigned char cmd, unsigned char *cbuf, int clen);
 
 /*
- * call btif_step periodic or call when fd readable.
+ * put slip wire data.
  */
-int btif_step(btif_t bi);
+int btif_recv(btif_t bi, void *data, size_t len);
 
 /* concreate api */
 struct btif_vtbl {

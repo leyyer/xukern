@@ -2,13 +2,12 @@ require("btif")
 
 actor.name("btif")
 
-bi, fd = btif.open(...)
+bi, fd = btif.sockOpen(...)
 
 function handle_io(src, msg, sz)
 	actor.error("event: " .. ioevent.event(msg) .. " len: " .. ioevent.len(msg))
 	if ioevent.event(msg) == 6 then -- data
 		bi:put(ioevent.data(msg), ioevent.len(msg))
-		bi:step()
 		bi:power(0)
 	end
 end

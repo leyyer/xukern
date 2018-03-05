@@ -7,7 +7,6 @@
 #include "xu_malloc.h"
 #include "xu_util.h"
 #include "xu_io.h"
-#include "slip.h"
 #include "btif.h"
 #include "lauxlib.h"
 #include "lualib.h"
@@ -17,26 +16,12 @@
 #define BTIF_MTCLASS "mt.Btif"
 #define BTIF() (luaL_checkudata(L, 1, BTIF_MTCLASS))
 
-struct btif {
-	struct slip_rdwr base;
+struct lua_btif {
 	btif_t    btif;
 	int       tty;
 	uint32_t  handle;
 	uint32_t  fd;
-
-	int cap;
-	int len;
-	unsigned char *data;
 };
-
-static int __btif_step(lua_State *L)
-{
-	struct btif *bi = BTIF();
-
-	if (bi->btif)
-		btif_step(bi->btif);
-	return 0;
-}
 
 static int traceback(lua_State *L)
 {
@@ -71,25 +56,11 @@ static void __on_cmd(void *arg, unsigned char cmd, unsigned char *cmdbuf, int cm
 	}
 }
 
-static ssize_t __tty_read(struct slip_rdwr *srd, void *buf, size_t len)
-{
-	struct btif *bif = (struct btif *)srd;
-
-	if (len > bif->len) {
-		len = bif->len;
-	}
-
-	memcpy(buf, bif->data, len);
-
-	bif->len -= len;
-	return len;
-}
-
-static ssize_t __tty_write(struct slip_rdwr *srd, const void *buf, size_t len)
+static int __output(btif_t bi, void *ud, const unsigned char *buf, int len)
 {
 	int n;
 	const unsigned char *sbuf = buf;
-	struct btif *bif = (struct btif *)srd;
+	struct lua_btif *bif = ud;
 	
 	while (len > 0) {
 		n = write(bif->tty, sbuf, len);
@@ -106,16 +77,11 @@ static ssize_t __tty_write(struct slip_rdwr *srd, const void *buf, size_t len)
 	if (n < 0) {
 		perror("sendto: ");
 	}
-	return sbuf - (const unsigned char *)buf;
+	return sbuf - buf;
 }
 
-static void __do_close(struct btif *bi)
+static void __do_close(struct lua_btif *bi)
 {
-	xu_free(bi->data);
-	bi->cap = 0;
-	bi->len = 0;
-	bi->data = NULL;
-
 	close(bi->tty);
 	xu_io_close(bi->handle, bi->fd);
 	xu_error(0, "btif close %p => %p\n", bi, bi->btif);
@@ -124,39 +90,19 @@ static void __do_close(struct btif *bi)
 	bi->tty = -1;
 }
 
-static int __tty_close(struct slip_rdwr *srd)
-{
-	struct btif *bi = (struct btif *)srd;
-
-	if (bi->tty >= 0) {
-		__do_close(bi);
-	}
-	return 0;
-}
-
-static int __btif_open(lua_State *L)
+static int __btif_new(lua_State *L, int fd, int tty)
 {
 	btif_t btif;
-	const char *dev;
-	struct btif *bi;
-	int fd;
+	struct lua_btif *bi;
 	struct xu_actor *ctx = lua_touserdata(L, lua_upvalueindex(1));
-
-	dev = luaL_checkstring(L, 1);
-	fd = btif_tty_open(dev);
-	if (fd < 0) {
-		return 0;
-	}
 
 	bi = lua_newuserdata(L, sizeof *bi);
 	bi->tty = fd;
-	bi->base.read  = __tty_read;
-	bi->base.write = __tty_write;
-	bi->base.close = __tty_close;
-	bi->cap = 0;
-	bi->len = 0;
-	bi->data = NULL;
-	btif = btif_generic_new(&bi->base, 0);
+	if (tty) {
+		btif = btif_new(__output, bi);
+	} else {
+		btif = btif_sock_new(__output, bi);
+	}
 	assert(btif != NULL);
 	bi->btif = btif;
 	bi->handle = xu_actor_handle(ctx);
@@ -168,9 +114,35 @@ static int __btif_open(lua_State *L)
 	return 2;
 }
 
+static int __btif_open(lua_State *L)
+{
+	const char *dev;
+	int fd;
+
+	dev = luaL_checkstring(L, 1);
+	fd = btif_tty_open(dev);
+	if (fd < 0) {
+		return 0;
+	}
+	return __btif_new(L, fd, 1);
+}
+
+static int __btif_sockopen(lua_State *L)
+{
+	const char *dev;
+	int fd;
+
+	dev = luaL_checkstring(L, 1);
+	fd = btif_sock_open(dev);
+	if (fd < 0) {
+		return 0;
+	}
+	return __btif_new(L, fd, 0);
+}
+
 static int __btif_close(lua_State *L)
 {
-	struct btif *bi = BTIF();
+	struct lua_btif *bi = BTIF();
 
 	if (bi->btif) {
 		__do_close(bi);
@@ -180,7 +152,7 @@ static int __btif_close(lua_State *L)
 
 static int __btif_set_callback(lua_State *L)
 {
-	struct btif *bi = BTIF();
+	struct lua_btif *bi = BTIF();
 
 	luaL_checktype(L, 2, LUA_TFUNCTION);
 	lua_settop(L, 2);
@@ -196,25 +168,18 @@ static int __btif_set_callback(lua_State *L)
 
 static int __btif_data(lua_State *L)
 {
-	struct btif *bi = BTIF();
+	struct lua_btif *bi = BTIF();
 	unsigned char *data = lua_touserdata(L, 2);
 	size_t sz = luaL_checkinteger(L, 3);
 
-	int tlen = sz + bi->len;
-
-	if (tlen > bi->cap) {
-		bi->data = xu_realloc(bi->data, tlen);
-		bi->cap = tlen;
-	}
-	memcpy(bi->data + bi->len, data, sz);
-	bi->len += sz;
+	btif_recv(bi->btif, data, sz);
 
 	return 0;
 }
 
 static int __btif_cmd(lua_State *L)
 {
-	struct btif *bi = BTIF();
+	struct lua_btif *bi = BTIF();
 	const char *str;
 	size_t len = 0;
 	int cmd, err;
@@ -229,7 +194,7 @@ static int __btif_cmd(lua_State *L)
 
 static int __btif_reboot(lua_State *L)
 {
-	struct btif *bi = BTIF();
+	struct lua_btif *bi = BTIF();
 
 	btif_reboot(bi->btif);
 
@@ -238,7 +203,7 @@ static int __btif_reboot(lua_State *L)
 
 static int __btif_power(lua_State *L)
 {
-	struct btif *bi = BTIF();
+	struct lua_btif *bi = BTIF();
 	int type = luaL_checkinteger(L, 2);
 
 	btif_set_power(bi->btif, type);
@@ -249,6 +214,7 @@ int luaopen_btif(lua_State *L)
 {
 	luaL_Reg r[] = {
 		{"open", __btif_open},
+		{"sockOpen", __btif_sockopen},
 		{NULL, NULL}
 	};
 
@@ -256,7 +222,6 @@ int luaopen_btif(lua_State *L)
 		{"setCallback", __btif_set_callback},
 		{"command",     __btif_cmd},
 		{"put",         __btif_data},
-		{"step",        __btif_step},
 		{"reboot",      __btif_reboot},
 		{"power",       __btif_power},
 		{"close",       __btif_close},
