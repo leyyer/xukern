@@ -39,12 +39,7 @@ static void __on_cmd(void *arg, unsigned char cmd, unsigned char *cmdbuf, int cm
 {
 	lua_State *L = arg;
 
-	int top = lua_gettop(L);
-	if (top < 1) {
-		lua_pushcfunction(L, traceback);
-	} else {
-		assert(top == 1);
-	}
+	lua_pushcfunction(L, traceback);
 	lua_rawgetp(L, LUA_REGISTRYINDEX, __on_cmd);
 	lua_pushinteger(L, cmd);          /* <1>:  cmd */
 	lua_pushlightuserdata(L, cmdbuf); /* <2>:  data buffer */
@@ -54,6 +49,7 @@ static void __on_cmd(void *arg, unsigned char cmd, unsigned char *cmdbuf, int cm
 		xu_error(0, "%s: %s", __func__, lua_tostring(L, -1));
 		lua_pop(L, 1);
 	}
+	lua_pop(L, 1); /* pop traceback */
 }
 
 static int __output(btif_t bi, void *ud, const unsigned char *buf, int len)
@@ -187,7 +183,7 @@ static int __btif_cmd(lua_State *L)
 	cmd = luaL_checkinteger(L, 2);
 	str = luaL_checklstring(L, 3, &len);
 	err = btif_cmd(bi->btif, cmd, (void *)str, len);
-	xu_error(0, "%s %d\n", __func__, err);
+	xu_error(NULL, "%s %d\n", __func__, err);
 	lua_pushboolean(L, err == 0);
 	return 1;
 }
@@ -220,7 +216,7 @@ int luaopen_btif(lua_State *L)
 
 	luaL_Reg mt_r[] = {
 		{"setCallback", __btif_set_callback},
-		{"command",     __btif_cmd},
+		{"cmd",         __btif_cmd},
 		{"put",         __btif_data},
 		{"reboot",      __btif_reboot},
 		{"power",       __btif_power},

@@ -19,6 +19,11 @@ function dispatch(mtype, src, msg, sz)
 	end
 end
 
+function slip_cmd(cmd, data, sz)
+	actor.error("slip cmd " .. cmd .. " len " .. sz)
+end
+
+bi:setCallback(slip_cmd)
 actor.logon()
 actor.error("btif fdesc: " .. tostring(fd))
 actor.callback(dispatch)
