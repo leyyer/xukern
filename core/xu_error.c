@@ -119,7 +119,7 @@ static void log_io(FILE * f, const struct xu_io_event * message, size_t sz)
 {
 	int eol = 0;
 	size_t size = message->size;
-	fprintf(f, "[io] %u %d %d %d :> ", message->fdesc, message->event, size, message->u.errcode);
+	fprintf(f, "[io] %u %d %d 0x%x :> ", message->fdesc, message->event, size, message->u.errcode);
 
 	if (size > 0) {
 		const void *ud = message->data;

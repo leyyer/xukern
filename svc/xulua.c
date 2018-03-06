@@ -697,7 +697,7 @@ static void do_exit(struct xu_actor *ctx, uint32_t handle)
 		handle = xu_actor_handle(ctx);
 		xu_error(ctx, "kill self");
 	} else {
-		xu_error(ctx, "kill :08x", handle);
+		xu_error(ctx, "kill :%08x", handle);
 	}
 	xu_handle_retire(handle);
 }

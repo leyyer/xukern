@@ -80,7 +80,7 @@ static void __do_close(struct lua_btif *bi)
 {
 	close(bi->tty);
 	xu_io_close(bi->handle, bi->fd);
-	xu_error(0, "btif close %p => %p\n", bi, bi->btif);
+	xu_error(0, "btif close %p => %p", bi, bi->btif);
 	btif_free(bi->btif);
 	bi->btif = NULL;
 	bi->tty = -1;
@@ -183,7 +183,7 @@ static int __btif_cmd(lua_State *L)
 	cmd = luaL_checkinteger(L, 2);
 	str = luaL_checklstring(L, 3, &len);
 	err = btif_cmd(bi->btif, cmd, (void *)str, len);
-	xu_error(NULL, "%s %d\n", __func__, err);
+	xu_error(NULL, "%s %d", __func__, err);
 	lua_pushboolean(L, err == 0);
 	return 1;
 }

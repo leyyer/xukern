@@ -5,6 +5,7 @@
 		"lua_cpath" : "./btif/?.so",
 		"logpath" : "./log",
 		"logger" : "logger",
-		"bootstrap" : "xulua tty tty /dev/ttyS1"
-	}
+		"bootstrap": "xulua console 61000"
+	},
+	"bootstrap" : "xulua tty tty /dev/ttyS1"
 }

@@ -250,6 +250,22 @@ static struct iohandle *alloc_iohandle(struct io_context *ic)
 	return ioh;
 }
 
+void xu_io_gc(void)
+{
+	struct xu_actor *ctx;
+	struct iohandle *it, *n;
+
+	list_for_each_entry_safe(it, n, &_ioc->io, link) {
+		ctx = xu_handle_ref(it->owner);
+		if (!ctx) {
+			xu_error(NULL, ":%08x dead?", it->owner);
+			__close_handle(it, 0);
+		} else {
+			xu_actor_unref(ctx);
+		}
+	}
+}
+
 static struct iohandle *__find_io(struct io_context *ic, uint32_t owner, uint32_t fdesc)
 {
 	struct iohandle *h = NULL, *it;
@@ -336,6 +352,7 @@ static void __on_accept(uv_stream_t *stream, int err)
 		if (uv_accept(stream, &ioh->u.stream) == 0) {
 			union sockaddr_all sal;
 			int namelen;
+			/* check owner is alive */
 			ioh->flag = IO_HF_CONNECTED;
 			ioh->protocol = server->protocol;
 			ioh->owner = server->owner;
@@ -349,6 +366,7 @@ static void __on_accept(uv_stream_t *stream, int err)
 			xu_error(NULL, "handle :%0x accept failed.", server->owner);
 		}
 	}
+	xu_io_gc();
 }
 
 static int __listen_tcp(struct iohandle *ioh, struct addrinfo *ai)
@@ -817,6 +835,8 @@ static void __on_req(uv_poll_t *uvp, int status, int events)
 	struct io_context *ic;
 	struct request req;
 	int r, fd, size;
+
+	xu_io_gc();
 
 	if (uv_fileno((uv_handle_t *)uvp, &fd) != 0) {
 		xu_error(NULL, "can't get file handle");

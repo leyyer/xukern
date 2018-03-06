@@ -21,6 +21,7 @@ void xu_updatetime(void);
 
 void xu_kern_global_init(const char *mod_path);
 void xu_io_init(void);
+void xu_io_gc(void);
 
 int xu_actors_total();
 void xu_log_output(FILE *f, uint32_t source, int type, const void * buffer, size_t sz);
