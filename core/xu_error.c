@@ -94,38 +94,45 @@ void xu_log_close(struct xu_actor * ctx, FILE *f, uint32_t handle)
 	fclose(f);
 }
 
-static void log_blob(FILE *f, const void * buffer, size_t sz)
+static int log_blob(FILE *f, const void * buffer, size_t sz)
 {
 	size_t i;
 	const uint8_t * buf = buffer;
+	int eol = 0;
 
 	for (i = 0; i < sz; i++) {
-		fprintf(f, "%02x%c", buf[i], (i + 1) % 8 ? ' ' : '\n');
+		eol = (i + 1) % 8  == 0;
+		fprintf(f, "%02x%c", buf[i], eol ? '\n' : ' ');
 	}
+	return eol;
 }
 
 static void log_io(FILE * f, const struct xu_io_event * message, size_t sz)
 {
+	int eol = 0;
 	size_t size = message->size;
 	fprintf(f, "[io] %u %d %d %d :> ", message->fdesc, message->event, size, message->u.errcode);
 
-	if (sz > 0) {
+	if (size > 0) {
 		const void *ud = message->data;
-		log_blob(f, ud, sz);
+		eol = log_blob(f, ud, size);
 	}
-	fprintf(f, "\n");
+	if (!eol)
+		fprintf(f, "\n");
 	fflush(f);
 }
 
 void xu_log_output(FILE *f, uint32_t source, int type, const void * buffer, size_t sz)
 {
+	int eol = 0;
 	if (type == MTYPE_IO) {
 		log_io(f, buffer, sz);
 	} else {
 		uint32_t ti = (uint32_t)xu_now();
 		fprintf(f, ":%08x %d %u ", source, type, ti);
 		log_blob(f, buffer, sz);
-		fprintf(f,"\n");
+		if (!eol)
+			fprintf(f,"\n");
 		fflush(f);
 	}
 }

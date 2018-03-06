@@ -419,6 +419,10 @@ static int __raw_send(struct slip *sl, unsigned char *buf, int len)
 	return 0;
 }
 
+/*
+ * create sl0 netdev use command:
+ * slattach -dL -v -s 115200 -p slip /dev/ttyS1
+ */
 btif_t btif_sock_new(int (*outgoing)(btif_t, void *data, const unsigned char *buf, int len), void *ud)
 {
 	btif_t bif = btif_new(outgoing, ud);

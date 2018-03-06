@@ -3,7 +3,8 @@
 		"threads" : "2",
 		"mod_path" : "./svc",
 		"lua_cpath" : "./btif/?.so",
+		"logpath" : "./log",
 		"logger" : "logger",
-		"bootstrap" : "xulua tcpecho"
+		"bootstrap" : "xulua tty tty /dev/ttyS1"
 	}
 }

@@ -67,5 +67,5 @@ end
 actor.callback(dispatch)
 actor.error("threads: " .. os.getenv("UV_THREADPOOL_SIZE"))
 --actor.launch("xulua", "tty /dev/ttyS1")
-actor.launch("xulua", "tty sl0")
+--actor.launch("xulua", "tty sl0")
 

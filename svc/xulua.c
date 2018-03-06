@@ -170,14 +170,14 @@ static int __xie_get_data(lua_State *L)
 static void __xio_event(lua_State *L)
 {
 	luaL_Reg xe[] = {
-		{"event", __xie_get_event},
-		{"fd", __xie_get_fd},
-		{"len", __xie_get_len},
-		{"errno", __xie_get_errcode},
+		{"event",    __xie_get_event},
+		{"fd",       __xie_get_fd},
+		{"len",      __xie_get_len},
+		{"errno",    __xie_get_errcode},
 		{"tostring", __xie_tostring},
-		{"data", __xie_get_data},
-		{"address", __xie_get_address},
-		{"free", __xie_free},
+		{"data",     __xie_get_data},
+		{"address",  __xie_get_address},
+		{"free",     __xie_free},
 		{NULL, NULL}
 	};
 	luaL_openlib(L, "ioevent", xe, 0);
@@ -247,15 +247,14 @@ static int __buf_read32(lua_State *L)
 static void __xio_buffer(lua_State *L)
 {
 	luaL_Reg xb[] = {
-		{"readu8", __buf_read_u8},
-		{"read8", __buf_read8},
+		{"readu8",  __buf_read_u8},
+		{"read8",   __buf_read8},
 		{"readu16", __buf_read_u16},
-		{"read16", __buf_read16},
-		{"reau32", __buf_read_u32},
-		{"read32", __buf_read32},
+		{"read16",  __buf_read16},
+		{"readu32", __buf_read_u32},
+		{"read32",  __buf_read32},
 		{NULL, NULL}
 	};
-//	luaL_newlib(L, xb);
 	luaL_openlib(L, "rdbuf", xb, 0);
 	lua_pop(L, 1);
 }

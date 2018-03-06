@@ -127,6 +127,10 @@ void xu_kern_init(int argc, char *argv[])
 		setenv("UV_THREADPOOL_SIZE", thr, 1);
 	}
 
+	if ((s = xu_getenv("logpath", NULL, 0)) != NULL) {
+		mkdir(s, 0755);
+	}
+
 	xu_timer_init();
 	xu_io_init();
 
