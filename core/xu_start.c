@@ -243,17 +243,27 @@ static void __kern_prestart()
 
 void xu_kern_start()
 {
+	static int __init = 0;
 	uv_loop_t *loop = uv_default_loop();
-	__kern_prestart();
-	xu_error(NULL, "running");
+
+	if (__init == 0) {
+		__kern_prestart();
+		ATOM_CAS(&__init, 0, 1);
+		/* xu_error(NULL, "running"); */
+	}
 	uv_run(loop, UV_RUN_DEFAULT);
 }
 
-void xu_kern_step()
+int xu_kern_step()
 {
+	static int __init = 0;
 	uv_loop_t *loop = uv_default_loop();
-	__kern_prestart();
-	uv_run(loop, UV_RUN_ONCE);
+
+	if (__init == 0) {
+		__kern_prestart();
+		ATOM_CAS(&__init, 0, 1);
+	}
+	return uv_run(loop, UV_RUN_ONCE);
 }
 
 void xu_kern_exit()

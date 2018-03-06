@@ -62,16 +62,24 @@ void xu_error(struct xu_actor * context, const char *msg, ...)
 	xu_handle_msgput(logger, &smsg);
 }
 
-FILE *xu_log_open(struct xu_actor *ctx, uint32_t handle)
+FILE *xu_log_open(struct xu_actor *ctx, const char *p, const char *def)
 {
 	const char * logpath = xu_getenv("logpath", NULL, 0);
+	uint32_t handle;
 
 	if (logpath == NULL) {
 		logpath = ".";
 	}
-	size_t sz = strlen(logpath);
-	char tmp[sz + 16];
-	sprintf(tmp, "%s/%08x.log", logpath, handle);
+	char tmp[BUFSIZ] = {0};
+
+	if (p && p[0] != '\0') {
+		sprintf(tmp, "%s/%s.log", logpath, p);
+	} else if (def && def[0] != '\0') {
+		sprintf(tmp, "%s/%s.log", logpath, def);
+	} else {
+		handle = xu_actor_handle(ctx);
+		sprintf(tmp, "%s/%08x.log", logpath, handle);
+	}
 	FILE *f = fopen(tmp, "ab");
 	if (f) {
 		uint32_t starttime = xu_starttime();

@@ -447,11 +447,7 @@ int xu_actor_logon(struct xu_actor *ctx, const char *p)
 	FILE *f = NULL, *lastf = ctx->logfile;
 
 	if (lastf == NULL) {
-		if (p) {
-			f = fopen(p, "ab");
-		} else {
-			f = xu_log_open(ctx, ctx->handle);
-		}
+		f = xu_log_open(ctx, p, ctx->name);
 		if (f) {
 			if (!ATOM_CAS_POINTER(&ctx->logfile, NULL, f)) {
 				fclose(f);

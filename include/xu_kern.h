@@ -32,14 +32,27 @@ struct xu_msg {
 struct queue;
 struct xu_actor;
 
+/*
+ * Init the xukern library.
+ */
 void xu_kern_init(int argc, char *argv[]);
+
+/*
+ * start xukern.
+ */
 void xu_kern_start(void);
 
 /*
- * run loop once.
+ * run xukern once.
+ *
+ * return: if have more events care, return > 0,
+ *  if have no more events, return 0.
  */
-void xu_kern_step(void);
+int xu_kern_step(void);
 
+/*
+ * cleanup the libary.
+ */
 void xu_kern_exit(void);
 
 typedef int (*xu_callback_t)(struct xu_actor *, void *ud, int type, uint32_t src, void *msg, size_t sz);
@@ -68,20 +81,27 @@ int xu_actor_name(struct xu_actor *ctx, char *buf, int len);
 void xu_actors_foreach(void *ud, int (*f)(void *ud, struct xu_actor *));
 
 /*
- * Log
+ * Logon
+ *
+ * p: the log filename. if p == NULL, using handle as name prefix.
  */
 int xu_actor_logon(struct xu_actor *ctx, const char *p);
 void xu_actor_logoff(struct xu_actor *ctx);
 
+/*
+ * print msg to logger actor.
+ */
 void xu_error(struct xu_actor * context, const char *msg, ...);
 
 /*
  * time api.
  */
 uint64_t xu_now(void);
-uint64_t xu_starttime(void);
-void xu_updatetime(void);
 int xu_timeout(uint32_t handle, int time, int session);
+
+/*
+ * environments api.
+ */
 void xu_setenv(const char *env, const char *value);
 const char *xu_getenv(const char *env, char *buf, size_t size);
 

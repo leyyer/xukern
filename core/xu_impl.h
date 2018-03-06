@@ -16,12 +16,15 @@
 struct xu_actor;
 
 void xu_timer_init(void);
+uint64_t xu_starttime(void);
+void xu_updatetime(void);
+
 void xu_kern_global_init(const char *mod_path);
 void xu_io_init(void);
 
 int xu_actors_total();
 void xu_log_output(FILE *f, uint32_t source, int type, const void * buffer, size_t sz);
-FILE *xu_log_open(struct xu_actor *ctx, uint32_t handle);
+FILE *xu_log_open(struct xu_actor *ctx, const char *logname, const char *def);
 void xu_log_close(struct xu_actor * ctx, FILE *f, uint32_t handle);
 
 /* init environment */
