@@ -7,7 +7,7 @@ local p = actor.getenv("lua_path")
 if p then
 	package.path = p
 else
-	package.path = "./scripts/?.lua"
+	package.path = "./scripts/?.lua;./scripts/lib/?.lua"
 end
 
 p = actor.getenv("lua_cpath")

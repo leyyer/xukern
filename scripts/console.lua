@@ -1,10 +1,11 @@
+socket = require("socket")
 actor.name("console")
 local MTYPE_IO = 3
 local args = { ... }
 local events = {"error", "listen", "connect", "connection", "message", "data", "close", "drain"}
 local e = ioevent
 
-server = sio.createTcpServer("0.0.0.0", args[1])
+server = socket.createTcpServer("0.0.0.0", args[1])
 
 conns = {}
 
@@ -28,13 +29,9 @@ end
 
 function handle_cmd(fd, line)
 	fields = line:split("\t ")
---[[
-	for i, v in ipairs(fields) do
-		print(i, v)
-	end
---]]
 	if fields[1] == "quit" or fields[1] == "exit" then
-		sio.close(fd)
+		local h = conns[fd].handle
+		h:close()
 	elseif fields[1] == "launch" then
 		actor.launch(fields[2], table.concat(fields, " ", 3))
 	elseif fields[1] == "kill" then
@@ -79,25 +76,39 @@ function put_data(fd, buf, sz)
 	state.option = o
 	state.data = d
 	conns[fd] = state
-	sio.write(fd, ob)
+	local h = conns[fd].handle
+	h:write(ob);
 	if cend then
 		handle_cmd(fd, d)
-		state["data"] = nil
-		sio.write(fd, "> ")
+		state.data = ""
+		h:write("> ")
 	end
 end
+
+server:on("connection", function(fd)
+		local c = socket.accept(fd)
+		c:on("data", function (msg, len) put_data(c:getFd(), msg, len) end)
+		c:on("close", function() c:close() conns[c:getFd()] = nil end)
+		conns[fd] = {handle = c}
+		c:write("\xFF\xFB\x03\xFF\xFB\x01\xFF\xFD\x03\xFF\xFD\x01> ")
+end)
 
 function handle_io(src, msg, sz)
 	local et = e.event(msg)
 	local fd = e.fd(msg)
 	actor.error("event type: " .. events[et] .. " fd " .. fd .. " msglen " .. e.len(msg))
 	if et == 4 then -- new connection
-		conns[fd] = {}
-		sio.write(fd, "\xFF\xFB\x03\xFF\xFB\x01\xFF\xFD\x03\xFF\xFD\x01> ")
+		server:emit("connection", fd)
 	elseif et == 7 then
-		conns[fd] = nil
+		local s = conns[fd].handle
+		if s ~= nil then
+			s:emit("close")
+		end
 	elseif et == 6 then
-		put_data(fd, e.data(msg), e.len(msg))
+		local s = conns[fd].handle
+		if s ~= nil then
+			s:emit("data", e.data(msg), e.len(msg))
+		end
 	end
 end
 
@@ -111,3 +122,4 @@ end
 actor.callback(dispatch)
 actor.logon()
 actor.error("console bind port: " .. args[1])
+
