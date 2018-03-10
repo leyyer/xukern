@@ -6,6 +6,12 @@ function M:constructor()
 	self._once = {}
 end
 
+function M:prependOnceListener(e, f)
+	local xe = self._once[e] or {}
+	table.insert(xe, 1, f)
+	self._once[e] = xe
+end
+
 function M:once(e, f)
 	local xe = self._once[e] or {}
 	table.insert(xe, f)
@@ -16,6 +22,12 @@ function M:on(e, f)
 	local xe = self._event[e] or {}
 	table.insert(xe, f)
 	self._event[e] = xe 
+end
+
+function M:prependListener(e, f)
+	local xe = self._event[e] or {}
+	table.insert(xe, 1, f)
+	self._event[e] = xe
 end
 
 function M:listenerCount(e)
