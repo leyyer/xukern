@@ -1,13 +1,13 @@
-require("btif")
+bif = require("btif")
 
 actor.name("btif")
 
 local arg = { ... }
 
 if arg[1] == "sock" then
-	bi, fd = btif.sockOpen(arg[2])
+	bi, fd = bif.sockOpen(arg[2])
 elseif arg[1] == "tty" then
-	bi, fd = btif.open(arg[2])
+	bi, fd = bif.open(arg[2])
 else
 	error("can't find type: " .. arg[1])
 end

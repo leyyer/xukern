@@ -44,9 +44,9 @@ end
 
 function put_data(fd, buf, sz)
 	local state = conns[fd] or {}
-	local d = state["data"] or {}
-	local o = state["option"] or 0
-	local ob = {}
+	local d = state.data or ""
+	local o = state.option or 0
+	local ob = ""
 	local cend = false
 
 	for _, dt in sockin(fd, buf, sz) do
@@ -60,22 +60,28 @@ function put_data(fd, buf, sz)
 			else
 				o = 0
 			end
+		elseif dt == 0x8 then -- '\b'
+			local slen = d:len()
+			if slen > 0 then
+				d = d:sub(1, slen - 1)
+				ob = ob .. '\b \b'
+			end
 		elseif dt == 0xa then -- '\n'
 		elseif dt == 0xd then -- '\r'
-			table.insert(ob, "\r\n")
+			ob = ob .. "\r\n"
 			cend = true
 			break
 		else
-			table.insert(ob, string.char(dt))
-			table.insert(d, string.char(dt))
+			ob = ob .. string.char(dt)
+			d = d .. string.char(dt)
 		end
 	end
-	state["option"] = o
-	state["data"] = d
+	state.option = o
+	state.data = d
 	conns[fd] = state
-	sio.write(fd, table.concat(ob))
+	sio.write(fd, ob)
 	if cend then
-		handle_cmd(fd, table.concat(d))
+		handle_cmd(fd, d)
 		state["data"] = nil
 		sio.write(fd, "> ")
 	end

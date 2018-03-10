@@ -232,8 +232,9 @@ int luaopen_btif(lua_State *L)
 	luaL_setfuncs(L, mt_r, 0);
 	lua_pop(L, 1);
 
+	lua_newtable(L);
 	lua_getfield(L, LUA_REGISTRYINDEX, "xu_actor");
-	luaL_openlib(L, "btif", r, 1);
+	luaL_setfuncs(L, r, 1);
 
 	return 1;
 }
