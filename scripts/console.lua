@@ -87,8 +87,8 @@ end
 
 server:on("connection", function(fd)
 		local c = socket.accept(fd)
-		c:on("data", function (msg, len) put_data(c:getFd(), msg, len) end)
-		c:on("close", function() c:close() conns[c:getFd()] = nil end)
+		c:on("data", function (msg, len) put_data(c:fd(), msg, len) end)
+		c:on("close", function() c:close() conns[c:fd()] = nil end)
 		conns[fd] = {handle = c}
 		c:write("\xFF\xFB\x03\xFF\xFB\x01\xFF\xFD\x03\xFF\xFD\x01> ")
 end)

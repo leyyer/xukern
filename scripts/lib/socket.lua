@@ -2,19 +2,19 @@ local base = require("event")
 local S = class(base)
 
 function S:constructor(fd)
-	self.fd = fd
+	self._fd = fd
 end
 
 function S:write(s)
-	return sio.write(self.fd, s)
+	return sio.write(self._fd, s)
 end
 
 function S:close()
-	return sio.close(self.fd)
+	return sio.close(self._fd)
 end
 
-function S:getFd()
-	return self.fd
+function S:fd()
+	return self._fd
 end
 
 local M = {}
