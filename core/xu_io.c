@@ -360,7 +360,8 @@ static void __on_accept(uv_stream_t *stream, int err)
 			ioh->handle = __get_fdesc();
 			namelen = sizeof sal;
 			uv_tcp_getpeername(&ioh->u.tcp, (void *)&sal, &namelen);
-			__report_lora(server->owner, XIE_EVENT_CONNECTION, ioh->handle, &sal.in);
+			__report_eorc(ioh->owner, XIE_EVENT_CONNECTION, server->handle, ioh->handle);
+			__report_lora(server->owner, XIE_EVENT_PEERADDR, ioh->handle, &sal.in);
 			uv_read_start(&ioh->u.stream, __on_alloc, __on_tcp_read);
 		} else {
 			xu_error(NULL, "handle :%0x accept failed.", server->owner);

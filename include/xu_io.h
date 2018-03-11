@@ -11,6 +11,7 @@
 #define XIE_EVENT_DATA       6
 #define XIE_EVENT_CLOSE      7
 #define XIE_EVENT_DRAIN      8
+#define XIE_EVENT_PEERADDR   9
 
 #define XIE_ERR_SUCC      0
 #define XIE_ERR_DNS       1

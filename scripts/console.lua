@@ -27,19 +27,21 @@ function string:split(sep)
 	return fields
 end
 
-function handle_cmd(fd, line)
+function handle_cmd(c, line)
 	fields = line:split("\t ")
 	if fields[1] == "quit" or fields[1] == "exit" then
-		local h = conns[fd].handle
-		h:close()
+		c:close()
 	elseif fields[1] == "launch" then
 		actor.launch(fields[2], table.concat(fields, " ", 3))
-	elseif fields[1] == "kill" then
+	elseif fields[1] == "kill" and fields[2] ~= nil then
 		actor.kill(fields[2])
+	else 
+		c:write("unknown: " .. fields[1] .. "\r\n")
 	end
 end
 
-function put_data(fd, buf, sz)
+function put_data(c, buf, sz)
+	local fd = c:fd()
 	local state = conns[fd] or {}
 	local d = state.data or ""
 	local o = state.option or 0
@@ -76,50 +78,28 @@ function put_data(fd, buf, sz)
 	state.option = o
 	state.data = d
 	conns[fd] = state
-	local h = conns[fd].handle
-	h:write(ob);
+	c:write(ob);
 	if cend then
-		handle_cmd(fd, d)
+		handle_cmd(c, d)
 		state.data = ""
-		h:write("> ")
+		c:write("> ")
 	end
+end
+
+local function on_data(c, msg, len)
+	return function(msg, len) put_data(c, msg, len) end
 end
 
 server:on("connection", function(fd)
 		local c = socket.accept(fd)
-		c:on("data", function (msg, len) put_data(c:fd(), msg, len) end)
+		c:on("data", on_data(c, msg, len))
 		c:on("close", function() c:close() conns[c:fd()] = nil end)
-		conns[fd] = {handle = c}
+		conns[fd] = {}
 		c:write("\xFF\xFB\x03\xFF\xFB\x01\xFF\xFD\x03\xFF\xFD\x01> ")
 end)
 
-function handle_io(src, msg, sz)
-	local et = e.event(msg)
-	local fd = e.fd(msg)
-	actor.error("event type: " .. events[et] .. " fd " .. fd .. " msglen " .. e.len(msg))
-	if et == 4 then -- new connection
-		server:emit("connection", fd)
-	elseif et == 7 then
-		local s = conns[fd].handle
-		if s ~= nil then
-			s:emit("close")
-		end
-	elseif et == 6 then
-		local s = conns[fd].handle
-		if s ~= nil then
-			s:emit("data", e.data(msg), e.len(msg))
-		end
-	end
-end
-
-function dispatch(msgtype, src, msg, sz)
-	actor.error("msgtype: " .. msgtype .. " now: " .. actor.now() .. " source: " .. src .. " len: " .. sz)
-	if msgtype == MTYPE_IO then
-		handle_io(src, msg, sz)
-	end
-end
-
-actor.callback(dispatch)
+local c = require("core")
+c.call()
 actor.logon()
 actor.error("console bind port: " .. args[1])
 
