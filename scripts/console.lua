@@ -1,9 +1,6 @@
 socket = require("socket")
 actor.name("console")
-local MTYPE_IO = 3
 local args = { ... }
-local events = {"error", "listen", "connect", "connection", "message", "data", "close", "drain"}
-local e = ioevent
 
 server = socket.createTcpServer("0.0.0.0", args[1])
 
