@@ -181,7 +181,7 @@ static void systime(uint32_t *sec, uint32_t *cs)
 	clock_gettime(CLOCK_REALTIME, &ti);
 
 	*sec = (uint32_t)ti.tv_sec;
-	*cs  = (uint32_t)(ti.tv_nsec / 10000000);
+	*cs  = (uint32_t)(ti.tv_nsec / 1000000);
 }
 
 static uint64_t gettime(void)
@@ -190,8 +190,8 @@ static uint64_t gettime(void)
 	struct timespec ti;
 
 	clock_gettime(CLOCK_MONOTONIC, &ti);
-	t = (uint64_t)ti.tv_sec * 100;
-	t += ti.tv_nsec / 10000000;
+	t = (uint64_t)ti.tv_sec * 1000;
+	t += ti.tv_nsec / 1000000;
 
 	return t;
 }

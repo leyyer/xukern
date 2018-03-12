@@ -22,7 +22,9 @@ end
 
 function M.entry()
 	local so = require("socket")
+	local tm = require("timeout")
 	so.init()
+	tm.init()
 	actor.callback(__dispatch_msg)
 end
 

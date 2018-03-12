@@ -89,6 +89,8 @@ server:on("connection", function(fd)
 		c:write("\xFF\xFB\x03\xFF\xFB\x01\xFF\xFD\x03\xFF\xFD\x01> ")
 end)
 
+--local tm = require("timeout")
+--tm.interval(function(a, b, c) actor.error("now: " .. actor.now() .. " timeout .. : " .. a .. " " .. b .. " " .. c .. " ") end, 20, 99,  88, 77)
 actor.logon()
 actor.error("console bind port: " .. args[1])
 local c = require("core")

@@ -305,7 +305,11 @@ static int __cb(struct xu_actor *ctx, void *ud, int mtype, uint32_t src, void *m
 	lua_pushvalue(L, 2);
 	lua_pushinteger(L, mtype);
 	lua_pushinteger(L, src);
-	lua_pushlightuserdata(L, (void *)msg);
+	if (sz == 0) {
+		lua_pushinteger(L, (ptrdiff_t)msg);
+	} else {
+		lua_pushlightuserdata(L, (void *)msg);
+	}
 	lua_pushinteger(L, sz);
 
 	int r = lua_pcall(L, 4, 0, 1);
