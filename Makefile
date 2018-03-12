@@ -15,6 +15,7 @@ LUA_DIR    := $(TOP)/3rd/lua
 CJSON_DIR  := $(TOP)/3rd/cJSON
 LIBEV_DIR  := $(TOP)/3rd/libev/src
 LIBUV_DIR  := $(TOP)/3rd/libuv
+LUA_CJSON_DIR  := $(TOP)/3rd/lua-cjson
 JEMALLOC_DIR  := $(TOP)/3rd/jemalloc
 RD3ROOT    := $(TOP)/usr
 
@@ -98,8 +99,8 @@ dependence: cJSON lua libuv jemalloc
 luaclib : luaclib/cjson.so
 	@echo "build all luaclibs"
 
-luaclib/cjson.so: luaclib/cjson.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared $^ -o $@ 
+lua_cjson:
+	$(MAKE) CC=$(CC) CFLAGS="$(CFLAGS)" -C $(LUA_CJSON_DIR)
 
 demo: tests/xc.o libxukern.so
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -Wl,-rpath,. -static-libgcc
@@ -107,10 +108,11 @@ demo: tests/xc.o libxukern.so
 kern: tests/kern.o libxukern.so
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -Wl,-rpath,. -static-libgcc
 
-extra: btif
+extra: btif lua_cjson
 	$(MAKE) CC=$(CC) CFLAGS="$(CFLAGS)" -C $(TOP)/svc
 
 clean:
+	$(MAKE) -C $(LUA_CJSON_DIR) clean
 	rm -rf *.o $(OBJS) tests/*.o svc/*.o btif/*.o btif/*.so
 
 distclean: clean
