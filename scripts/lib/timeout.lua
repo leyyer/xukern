@@ -14,18 +14,18 @@ function T:constructor(p, f, ms, arg)
 	M.timers[i] = self
 end
 
-local function __do_timeout(src, msg, len)
+local function __do_timeout(src, session, len)
 	if len ~= 0 then
 		actor.error("Maybe a bug: not a timeout message")
 	else
-		local tm = M.timers[msg]
+		local tm = M.timers[session]
 		if tm ~= nil then
 			f = tm.callback
 			f(table.unpack(tm.params))
 			if tm.periodic then
-				actor.timeout(tm.delay, msg)
+				actor.timeout(tm.delay, session)
 			else
-				M.timers[msg] = nil
+				M.timers[session] = nil
 			end
 		end
 	end
@@ -37,7 +37,7 @@ end
 
 function M.timeout(f, ms, ...)
 	if f == nil then
-		print("BUG: please specify callback function")
+		actor.error("BUG: please specify callback function")
 		return
 	end
 	local args = { ... }
@@ -46,7 +46,7 @@ end
 
 function M.interval(f, ms, ...)
 	if f == nil then
-		print("BUG: please specify callback function")
+		actor.error("BUG: please specify callback function")
 		return
 	end
 	local args = { ... }

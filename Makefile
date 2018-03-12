@@ -21,7 +21,7 @@ RD3ROOT    := $(TOP)/usr
 
 LINKLIBS := -ldl -lpthread -lm
 
-#DEBUG_FLAG := -O2
+#DEBUG_FLAG := -O2 -DNDEBUG
 DEBUG_FLAG := -O0 -g -ggdb
 
 LINK_ARCHIVES := -Wl,-whole-archive -lcjson -luv -ljemalloc_pic -llua -Wl,-no-whole-archive
@@ -117,3 +117,5 @@ clean:
 
 distclean: clean
 	rm -rf *.a $(RD3ROOT) *.so svc/*.so demo
+run: kern extra
+	./kern -c test/config.json

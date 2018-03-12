@@ -40,4 +40,8 @@
 2. *:address()* -- return ip address string.
 3. *:port()* --  return address's port.
 
-
+## lua library class
+### timeout class
+1. *timeout(func, ms, ...)* -- create a timeout callback. 
+2. *interval(func, ms, ...)* -- create a interval callback, the `func' called every ms delay.
+3. *:setTimeout(ms)* -- change delay, activated next interval.

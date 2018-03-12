@@ -12,6 +12,8 @@
 #include "lualib.h"
 #include "lua.h"
 
+#define BTIF_NAME    "btif"
+#define BTIF_VERSION "1.0"
 #define BTIF_CLASS   "Btif"
 #define BTIF_MTCLASS "mt.Btif"
 #define BTIF() (luaL_checkudata(L, 1, BTIF_MTCLASS))
@@ -235,6 +237,12 @@ int luaopen_btif(lua_State *L)
 	lua_newtable(L);
 	lua_getfield(L, LUA_REGISTRYINDEX, "xu_actor");
 	luaL_setfuncs(L, r, 1);
+
+	/* module name and version */
+	lua_pushliteral(L, BTIF_NAME);
+	lua_setfield(L, -2, "_NAME");
+	lua_pushliteral(L, BTIF_VERSION);
+	lua_setfield(L, -2, "_VERSION");
 
 	return 1;
 }

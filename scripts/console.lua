@@ -32,6 +32,18 @@ function handle_cmd(c, line)
 		actor.launch(fields[2], table.concat(fields, " ", 3))
 	elseif fields[1] == "kill" and fields[2] ~= nil then
 		actor.kill(fields[2])
+	elseif fields[1] == "query" then
+		local s
+		if fields[2] ~= nil then
+			s = actor.query(fields[2])
+		else
+			s = actor.query()
+		end
+		if s ~= nil and s:len() > 0 then
+			con:write(s .. "\r\n")
+		end
+	elseif fields[1] == "error" and fields[2] ~= nil then
+		actor.error(table.concat(fields, " " , 2))
 	else 
 		con:write("unknown: " .. fields[1] .. "\r\n")
 	end
