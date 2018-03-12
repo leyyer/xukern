@@ -238,7 +238,7 @@ static void __cmd_handler(struct slip *sl, void *arg, void *_vbuf, size_t len)
 	clen = (buf[1] << 8) | buf[2];
 
 	if (clen > (len - SLIP_MIN_LEN)) { /* cmd(1) + len(2) + cs(1) */
-		fprintf(stderr, "data too short: %d, expected: %d\n", len - 4, clen);
+		fprintf(stderr, "data too short: %zd, expected: %d\n", len - 4, clen);
 		return;
 	}
 

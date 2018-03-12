@@ -80,13 +80,13 @@ libev:
 
 libuv:
 	@(cd $(LIBUV_DIR); [ -f configure ] || sh autogen.sh)
-	(cd $(LIBUV_DIR) && ./configure --prefix=$(RD3ROOT) --host=$(CROSS_COMPILE) --disable-shared)
+	(cd $(LIBUV_DIR) && CFLAGS="$(CFLAGS)" ./configure --prefix=$(RD3ROOT) --host=$(CROSS_COMPILE) --disable-shared)
 	$(MAKE) -C $(LIBUV_DIR) install distclean
 	@rm -rf $(RD3ROOT)/lib/*.la
 
 jemalloc:
 	@(cd $(JEMALLOC_DIR); [ -f configure ] || sh autogen.sh)
-	(cd $(JEMALLOC_DIR) && ./configure --prefix=$(RD3ROOT) --host=$(CROSS_COMPILE) --disable-shared --with-jemalloc-prefix=je_)
+	(cd $(JEMALLOC_DIR) && CFLAGS="-fPIC -O2" ./configure --prefix=$(RD3ROOT) --host=$(CROSS_COMPILE) --disable-shared --with-jemalloc-prefix=je_)
 	$(MAKE) -C $(JEMALLOC_DIR) install_lib_static install_include distclean
 	@rm -rf $(RD3ROOT)/lib/*.la
 
