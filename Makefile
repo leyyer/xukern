@@ -1,5 +1,5 @@
-CROSS_COMPILE ?= arm-linux
-#CROSS_COMPILE ?= i586-linux-gnu
+#CROSS_COMPILE ?= arm-linux
+CROSS_COMPILE ?= i586-linux-gnu
 
 CC := $(CROSS_COMPILE)-gcc
 AR := $(CROSS_COMPILE)-ar

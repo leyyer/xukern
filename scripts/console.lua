@@ -4,9 +4,7 @@ local args = { ... }
 
 server = socket.createTcpServer("0.0.0.0", args[1])
 
-conns = {}
-
-function sockin(fd, buf, sz)
+function sockin(buf, sz)
 	return function(buf, i)
 		if i == sz then
 			return nil
@@ -25,27 +23,27 @@ function string:split(sep)
 end
 
 function handle_cmd(c, line)
+	local con = c.con
 	fields = line:split("\t ")
 	if fields[1] == "quit" or fields[1] == "exit" then
-		c:close()
+		con:close()
+		c.con = nil
 	elseif fields[1] == "launch" then
 		actor.launch(fields[2], table.concat(fields, " ", 3))
 	elseif fields[1] == "kill" and fields[2] ~= nil then
 		actor.kill(fields[2])
 	else 
-		c:write("unknown: " .. fields[1] .. "\r\n")
+		con:write("unknown: " .. fields[1] .. "\r\n")
 	end
 end
 
 function put_data(c, buf, sz)
-	local fd = c:fd()
-	local state = conns[fd] or {}
-	local d = state.data or ""
-	local o = state.option or 0
+	local d = c.data or ""
+	local o = c.option or 0
 	local ob = ""
 	local cend = false
 
-	for _, dt in sockin(fd, buf, sz) do
+	for _, dt in sockin(buf, sz) do
 		if dt == 0xff and o == 0 then
 			o = o + 1
 		elseif o ~= 0 then
@@ -72,31 +70,26 @@ function put_data(c, buf, sz)
 			d = d .. string.char(dt)
 		end
 	end
-	state.option = o
-	state.data = d
-	conns[fd] = state
-	c:write(ob);
+	c.option = o
+	c.data = d
+	local con = c.con
+	con:write(ob);
 	if cend then
 		handle_cmd(c, d)
-		state.data = ""
-		c:write("> ")
+		c.data = ""
+		con:write("> ")
 	end
-end
-
-local function on_data(c, msg, len)
-	return function(msg, len) put_data(c, msg, len) end
 end
 
 server:on("connection", function(fd)
 		local c = socket.accept(fd)
-		c:on("data", on_data(c, msg, len))
-		c:on("close", function() c:close() conns[c:fd()] = nil end)
-		conns[fd] = {}
+		local client = {con = c, data = "", option = 0}
+		c:on("data", function(msg, len) put_data(client, msg, len) end)
+		c:on("close", function() c:close() client = nil end)
 		c:write("\xFF\xFB\x03\xFF\xFB\x01\xFF\xFD\x03\xFF\xFD\x01> ")
 end)
 
-local c = require("core")
-c.call()
 actor.logon()
 actor.error("console bind port: " .. args[1])
-
+local c = require("core")
+c.entry()

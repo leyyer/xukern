@@ -1,4 +1,4 @@
-local protos = {}
+local __protos = {}
 
 local M = {
 	type = {
@@ -9,22 +9,18 @@ local M = {
 }
 
 function M.register(p, f)
-	protos[p] = f
+	__protos[p] = f
 end
 
 local function __dispatch_msg(mtype, src, msg, sz)
 --	actor.error("msgtype: " .. mtype .. " now: " .. actor.now() .. " source: " .. src .. " len: " .. sz)
-	for k, f in pairs(protos) do
-		if k == mtype then
-			if f ~= nil then
-				f(src, msg, sz)
-			end
-			break
-		end
+	local f = __protos[mtype]
+	if f ~= nil then
+		f(src, msg, sz)
 	end
 end
 
-function M.call()
+function M.entry()
 	local so = require("socket")
 	so.init()
 	actor.callback(__dispatch_msg)
