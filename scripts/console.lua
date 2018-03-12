@@ -25,6 +25,9 @@ end
 function handle_cmd(c, line)
 	local con = c.con
 	fields = line:split("\t ")
+	if fields[1] == nil then
+		return
+	end
 	if fields[1] == "quit" or fields[1] == "exit" then
 		con:close()
 		c.con = nil
