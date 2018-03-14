@@ -15,13 +15,6 @@ function sockin(buf, sz)
 	end, buf, 0
 end
 
-function string:split(sep)
-	local sep, fields = sep or "\t", {}
-	local p = string.format("[^%s]+", sep)
-	self:gsub(p, function(c) fields[#fields + 1] = c end)
-	return fields
-end
-
 function handle_cmd(c, line)
 	local con = c.con
 	fields = line:split("\t ")

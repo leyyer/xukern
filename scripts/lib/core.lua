@@ -28,5 +28,12 @@ function M.entry()
 	actor.callback(__dispatch_msg)
 end
 
+function string:split(sep)
+	local sep, fields = sep or "\t", {}
+	local p = string.format("[^%s]+", sep)
+	self:gsub(p, function(c) fields[#fields + 1] = c end)
+	return fields
+end
+
 return M
 

@@ -2,7 +2,8 @@
 	"environ": {
 		"threads" : "2",
 		"mod_path" : "./svc",
-		"lua_cpath" : "./btif/?.so;./3rd/lua-cjson/?.so",
+		"lua_cpath" : "./builtin/?.so;./3rd/lua-cjson/?.so",
+		"lua_path"  : "./scripts/?.lua;./scripts/lib/?.lua;./tests/?.lua",
 		"logpath" : "./log",
 		"logger" : "logger",
 		"bootstrap": "xulua console 61000"

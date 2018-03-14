@@ -32,10 +32,6 @@ CFLAGS  += -I$(TOP)/include -I$(RD3ROOT)/include -I$(TOP)/core -std=gnu99 -Wall 
 		   $(DEBUG_FLAG) -DUSE_JEMALLOC $(LUA_CFLAGS) -I$(RD3ROOT)/include/cjson -fPIC
 LDFLAGS += -L$(TOP) -L$(RD3ROOT)/lib -Wl,--start-group $(LINKLIBS) -lrt -lpthread -Wl,--end-group
 
-BTIF_OBJS := btif/slip.o \
-	btif/btif.o \
-	btif/lua_btif.o \
-
 OBJS += core/xu_utils.o \
 		core/xu_malloc.o \
 		core/xu_env.o \
@@ -51,12 +47,6 @@ all: libxukern.so kern
 
 libxukern.so : $(OBJS)
 	$(CC) -shared $(LDFLAGS) $(LINK_ARCHIVES) -o $@ $^
-
-btif : libxukern.so btif/btif.so
-	@echo "ok"
-
-btif/btif.so : $(BTIF_OBJS) 
-	$(CC) -shared $(LDFLAGS) -Wl,--rpath,. -L. -lxukern -o $@ $^
 
 luajit:
 	$(MAKE) HOST_CC=gcc STATIC_CC=$(CC) PREFIX=/usr CFLAGS='-fPIC -O2' DYNAMIC_CC='$(CC) -fPIC' TARGET_LD=$(CC) TARGET_AR='$(AR) rcs' TARGET_STRIP=$(STRIP) DESTDIR=$(TOP) -C $(LUAJIT_DIR) install clean
@@ -108,14 +98,16 @@ demo: tests/xc.o libxukern.so
 kern: tests/kern.o libxukern.so
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -Wl,-rpath,. -static-libgcc
 
-extra: btif lua_cjson
+extra: lua_cjson
 	$(MAKE) CC=$(CC) CFLAGS="$(CFLAGS)" -C $(TOP)/svc
+	$(MAKE) CC=$(CC) CFLAGS="$(CFLAGS)" -C $(TOP)/builtin
 
 clean:
 	$(MAKE) -C $(LUA_CJSON_DIR) clean
-	rm -rf *.o $(OBJS) tests/*.o svc/*.o btif/*.o btif/*.so
+	rm -rf *.o $(OBJS) tests/*.o svc/*.o 
 
 distclean: clean
-	rm -rf *.a $(RD3ROOT) *.so svc/*.so demo
+	rm -rf *.a $(RD3ROOT) *.so svc/*.so demo builin/*.so
+
 run: kern extra
 	./kern -c test/config.json
